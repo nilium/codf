@@ -1,0 +1,221 @@
+package codf
+
+import "math/big"
+
+type Parser Peg {
+	err error
+
+	// stages []stage
+	root *Root
+
+	sign        int
+	consumers   []consumer
+	baseIntBase int
+}
+
+Root <- {
+		if p.root == nil {
+			p.root = &Root{}
+		}
+		p.consumers = []consumer{p.root}
+	} ws Body ws !.
+
+Body <- ( ws Decl )*
+
+Decl <- Section / Statement / Empty
+
+Empty <- term
+
+# NAME [EXPR];
+Statement <- <Name> { p.beginStatement(text) }
+		       ( sep Expr )*
+		       ws term { p.closeStatement() }
+
+# NAME [EXPR] {...}
+Section <- <Name> { p.beginSection(text) }
+			( sep Expr )*
+			ws sectionOpen
+			( ws Body )?
+			ws sectionClose { p.closeSection() }
+sectionOpen <- '{'
+sectionClose <- '}'
+
+# TODO: Maps: :{ [K=Symbol V=Expr]... }
+
+Name <- bareSymbol
+Expr <- Literal
+
+##############
+## Literals ##
+##############
+
+Literal <- Number / Boolean / Nil / Regexp / String / Symbol / Map / Array
+
+# Arrays
+Array <- arrayOpen { p.beginArray() }
+	(ws arrayBody)? ws
+	arrayClose { p.closeArray() }
+arrayBody <- Expr ( sep Expr )*
+arrayOpen <- '['
+arrayClose <- ']'
+
+# Maps
+Map <- mapOpen { p.beginMap() }
+	(ws mapBody)? ws
+	mapClose { p.closeMap() }
+
+mapOpen <- ':{'
+mapClose <- '}'
+mapBody <- mapExpr (sep mapExpr)*
+mapExpr <- ( mapKey sep mapValue )
+
+mapKey <- String / Symbol
+mapValue <- Expr
+
+
+# Symbols
+Symbol <- < bareSymbol >  { p.consume(Symbol(text))}
+	/ ':' < String >  { p.consume(Symbol(unquote(typeSymbol, text))) }
+bareSymbol <- [.?/!@$%^&*|_a-zA-Z] bareSymbolTail?
+bareSymbolTail <- [-+=<>.?/!@$%^&*#|:_a-zA-Z0-9]+
+
+# Regexp
+Regexp <- ':' '/'      { p.beginRegexp() }
+	regexpBody
+	'/' { p.closeRegexp() }
+# regexpFlags <- [a-zA-Z]*
+regexpBody <- ( regexpEscape / regexpTail )*
+regexpTail <- < [^\\/]+ > { p.tip().(*regexpBuilder).add(text) }
+regexpEscape <- '\\' (
+	'/'               { p.tip().(*regexpBuilder).add("/") }
+	)
+
+
+# Strings
+String <- < quotedString > { p.consume(String(unquote(typeString, text))) }
+quotedString <- '"' stringBody '"'
+stringBody <- ( stringEscape / doubleQuoteEscape / stringTail )*
+doubleQuoteEscape <- '""'
+stringTail <- [^\\"]+
+stringEscape <- '\\' ( '\r'? '\n' / [\\abfnrtve] / stringOct / 'x' stringHex / 'u' stringUni16 / 'U' stringUni32 )
+stringOct <- octDigit (octDigit octDigit?)?
+stringHex <- hexOctet
+stringUni16 <- hexOctet hexOctet
+stringUni32 <- hexOctet hexOctet hexOctet hexOctet
+
+# Number
+Number <- { p.sign = 1 } sign? ( Decimal / Rational / Integer )
+
+octDigit <- [0-8]
+hexNibble <- [0-9a-fA-F]
+hexOctet <- hexNibble hexNibble
+
+# Rationals
+
+Rational <- < decInt '/' decInt > {
+		var x big.Rat
+		if _, ok := x.SetString(signedText(text, p.sign)); !ok {
+			p.err = fmt.Errorf("malformed rational: %q", text)
+			return
+		}
+		p.consume(Rational{&x})
+	}
+
+# Decimals
+Decimal <- < normDec > {
+		var x big.Float
+		if _, ok := x.SetString(signedText(text, p.sign)); !ok {
+			p.err = fmt.Errorf("malformed decimal: %q", text)
+			return
+		}
+		p.consume(Decimal{&x})
+	}
+	/ < expDec > {
+		var x big.Float
+		if _, ok := x.SetString(signedText(text, p.sign)); !ok {
+			p.err = fmt.Errorf("malformed decimal: %q", text)
+			return
+		}
+		p.consume(Decimal{&x})
+	}
+normDec <- decInt '.' decInt exponent?
+expDec <- decInt exponent
+exponent <- [Ee] sign? decInt
+
+# Integers
+Integer <- ( BaseInt / HexLit / BinLit / OctLit / DecInt )
+decInt <- '0' / posDecNum
+DecInt <- < decInt > {
+	var x big.Int
+	if _, ok := x.SetString(signedText(text, p.sign), 10); !ok {
+		p.err = fmt.Errorf("malformed integer: %q", text)
+		return
+	}
+	p.consume(Integer{&x})
+}
+posDecNum <- [1-9][0-9]*
+
+BaseInt <- < baseDec > {
+	if p.baseIntBase, p.err = strconv.Atoi(text); p.err != nil {
+		p.err = fmt.Errorf("invalid integer base %q: %v", text, p.err)
+		return
+	}
+} '#' < baseLit > {
+	var x big.Int
+	if _, ok := x.SetString(signedText(text, p.sign), p.baseIntBase); !ok {
+		p.err = fmt.Errorf("malformed base-%d integer %q", p.baseIntBase, text)
+		return
+	}
+
+	p.consume(Integer{&x})
+}
+# Bases 2-36
+baseDec <- [12] [0-9] / '3' [0-6] / [2-9] ![0-9]
+baseLit <- [a-zA-Z0-9]+
+
+HexLit <- '0' [Xx] < hexNibble+ > {
+	var x big.Int
+	if _, ok := x.SetString(signedText(text, p.sign), 16); !ok {
+		p.err = fmt.Errorf("malformed integer: %q", text)
+		return
+	}
+	p.consume(Integer{&x})
+}
+OctLit <- '0' < [0-7]+ > ![8-9] {
+	var x big.Int
+	if _, ok := x.SetString(signedText(text, p.sign), 8); !ok {
+		p.err = fmt.Errorf("malformed integer: %q", text)
+		return
+	}
+	p.consume(Integer{&x})
+}
+BinLit <- '0' [Bb] < [01]+ > ![2-9] {
+	var x big.Int
+	if _, ok := x.SetString(signedText(text, p.sign), 2); !ok {
+		p.err = fmt.Errorf("malformed integer: %q", text)
+		return
+	}
+	p.consume(Integer{&x})
+}
+
+sign <- minus  { p.sign *= -1 }
+	/ plus { p.sign = 1 }
+minus <- '-'
+plus <- '+'
+
+# Booleans
+Boolean <- (
+	True    { p.consume(Bool(true)) }
+	/ False { p.consume(Bool(false)) }
+	) !bareSymbolTail
+True <- 'true' / 'on' / 'yes'
+False <- 'false' / 'off' / 'no'
+
+# Nothing
+Nil <- 'nil' !bareSymbolTail { p.consume(Nil) }
+
+term <- ';'
+sep <- ( '\r'? '\n' / [ \t] )+
+ws <- ([ \t\n\r]+ / comment)*
+
+comment <- '#' [^\n]* '\n'
