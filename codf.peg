@@ -133,7 +133,7 @@ Decimal <- PointDecimal                 { p.consumeFloat(text) }
 
 PointDecimal <- < Int '.' Int Exponent? >
 ExpDecimal   <- < Int Exponent >
-Exponent     <- [Ee] Sign? Int
+Exponent     <- [Ee] [-+]? Int
 
 # Integers
 Integer <- BaseInt
