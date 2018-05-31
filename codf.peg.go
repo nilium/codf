@@ -3136,7 +3136,7 @@ func (p *Parser) Init() {
 			}
 			return true
 		},
-		/* 60 Comment <- <('\'' (!EOL .)* EOL)> */
+		/* 60 Comment <- <('\'' (!EOL .)* (EOL / EOF))> */
 		func() bool {
 			position330, tokenIndex330 := position, tokenIndex
 			{
@@ -3164,9 +3164,19 @@ func (p *Parser) Init() {
 				l333:
 					position, tokenIndex = position333, tokenIndex333
 				}
-				if !_rules[ruleEOL]() {
-					goto l330
+				{
+					position335, tokenIndex335 := position, tokenIndex
+					if !_rules[ruleEOL]() {
+						goto l336
+					}
+					goto l335
+				l336:
+					position, tokenIndex = position335, tokenIndex335
+					if !_rules[ruleEOF]() {
+						goto l330
+					}
 				}
+			l335:
 				add(ruleComment, position331)
 			}
 			return true
@@ -3176,61 +3186,61 @@ func (p *Parser) Init() {
 		},
 		/* 61 EOL <- <(('\r' '\n') / '\n' / '\r')> */
 		func() bool {
-			position335, tokenIndex335 := position, tokenIndex
+			position337, tokenIndex337 := position, tokenIndex
 			{
-				position336 := position
+				position338 := position
 				{
-					position337, tokenIndex337 := position, tokenIndex
+					position339, tokenIndex339 := position, tokenIndex
 					if buffer[position] != rune('\r') {
-						goto l338
+						goto l340
 					}
 					position++
 					if buffer[position] != rune('\n') {
-						goto l338
+						goto l340
 					}
 					position++
-					goto l337
-				l338:
-					position, tokenIndex = position337, tokenIndex337
+					goto l339
+				l340:
+					position, tokenIndex = position339, tokenIndex339
 					if buffer[position] != rune('\n') {
-						goto l339
+						goto l341
 					}
 					position++
-					goto l337
-				l339:
-					position, tokenIndex = position337, tokenIndex337
+					goto l339
+				l341:
+					position, tokenIndex = position339, tokenIndex339
 					if buffer[position] != rune('\r') {
-						goto l335
+						goto l337
 					}
 					position++
 				}
-			l337:
-				add(ruleEOL, position336)
+			l339:
+				add(ruleEOL, position338)
 			}
 			return true
-		l335:
-			position, tokenIndex = position335, tokenIndex335
+		l337:
+			position, tokenIndex = position337, tokenIndex337
 			return false
 		},
 		/* 62 EOF <- <!.> */
 		func() bool {
-			position340, tokenIndex340 := position, tokenIndex
+			position342, tokenIndex342 := position, tokenIndex
 			{
-				position341 := position
+				position343 := position
 				{
-					position342, tokenIndex342 := position, tokenIndex
+					position344, tokenIndex344 := position, tokenIndex
 					if !matchDot() {
-						goto l342
+						goto l344
 					}
-					goto l340
-				l342:
-					position, tokenIndex = position342, tokenIndex342
+					goto l342
+				l344:
+					position, tokenIndex = position344, tokenIndex344
 				}
-				add(ruleEOF, position341)
+				add(ruleEOF, position343)
 			}
 			return true
-		l340:
-			position, tokenIndex = position340, tokenIndex340
+		l342:
+			position, tokenIndex = position342, tokenIndex342
 			return false
 		},
 		/* 64 Action0 <- <{ p.init() }> */

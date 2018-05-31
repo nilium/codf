@@ -186,7 +186,7 @@ Space    <- [ \t\n\r]+ / Comment
 ReqSpace <- Space+
 OptSpace <- Space*
 
-Comment <- '\'' (!EOL .)* EOL
+Comment <- '\'' (!EOL .)* ( EOL / EOF )
 
 EOL <- '\r\n' / '\n' / '\r'
 
