@@ -343,16 +343,6 @@ func (b Bool) String() string {
 	return strconv.FormatBool(bool(b))
 }
 
-type nilVal struct{}
-
-func (*nilVal) expr() {}
-
-func (*nilVal) String() string {
-	return "nil"
-}
-
-var Nil = &nilVal{}
-
 type Key interface {
 	Expr
 

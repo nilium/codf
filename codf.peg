@@ -51,7 +51,6 @@ ExprList <- Expr ( ReqSpace Expr )*
 
 Literal <- { p.sign = 1 } Number
 	/ Boolean
-	/ Nil
 	/ Regexp
 	/ String
 	/ Symbol
@@ -175,9 +174,6 @@ FalseKw <- 'false' / 'False' / 'FALSE'
 	# / 'off' / 'Off' / 'OFF'
 True    <- TrueKw !BarewordTail
 False   <- FalseKw !BarewordTail
-
-# Nothing
-Nil <- "nil" !BarewordTail              { p.consume(Nil) }
 
 
 #################
