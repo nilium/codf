@@ -326,6 +326,9 @@ func (t *tokens32) Tokens() []token32 {
 type Parser struct {
 	err error
 
+	// Float precision
+	Precision uint
+
 	// stages []stage
 	root *Root
 

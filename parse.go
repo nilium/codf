@@ -7,6 +7,8 @@ import (
 	"strconv"
 )
 
+const DefaultPrecision uint = 80
+
 func signedText(text string, sign int) string {
 	switch sign {
 	case -1:
@@ -177,6 +179,11 @@ func (p *Parser) consumeInteger(str string, base int) {
 
 func (p *Parser) consumeFloat(str string) {
 	var x big.Float
+	prec := p.Precision
+	if prec == 0 {
+		prec = DefaultPrecision
+	}
+	x.SetPrec(prec)
 	if _, ok := x.SetString(signedText(str, p.sign)); !ok {
 		panic(fmt.Errorf("malformed decimal: %q", str))
 	}

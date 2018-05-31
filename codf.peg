@@ -3,6 +3,9 @@ package codf
 type Parser Peg {
 	err error
 
+	// Float precision
+	Precision uint
+
 	// stages []stage
 	root *Root
 
