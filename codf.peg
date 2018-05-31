@@ -131,8 +131,8 @@ Rational <- < Int '/' Int >             { p.consumeRational(text) }
 Decimal <- PointDecimal                 { p.consumeFloat(text) }
 	/ ExpDecimal                    { p.consumeFloat(text) }
 
-PointDecimal <- <  '.' DecInt Exponent? >
-ExpDecimal   <- < DecInt Exponent >
+PointDecimal <- < Int '.' Int Exponent? >
+ExpDecimal   <- < Int Exponent >
 Exponent     <- [Ee] Sign? Int
 
 # Integers

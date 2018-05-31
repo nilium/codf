@@ -2061,18 +2061,21 @@ func (p *Parser) Init() {
 			position, tokenIndex = position188, tokenIndex188
 			return false
 		},
-		/* 37 PointDecimal <- <<('.' DecInt Exponent?)>> */
+		/* 37 PointDecimal <- <<(Int '.' Int Exponent?)>> */
 		func() bool {
 			position192, tokenIndex192 := position, tokenIndex
 			{
 				position193 := position
 				{
 					position194 := position
+					if !_rules[ruleInt]() {
+						goto l192
+					}
 					if buffer[position] != rune('.') {
 						goto l192
 					}
 					position++
-					if !_rules[ruleDecInt]() {
+					if !_rules[ruleInt]() {
 						goto l192
 					}
 					{
@@ -2094,14 +2097,14 @@ func (p *Parser) Init() {
 			position, tokenIndex = position192, tokenIndex192
 			return false
 		},
-		/* 38 ExpDecimal <- <<(DecInt Exponent)>> */
+		/* 38 ExpDecimal <- <<(Int Exponent)>> */
 		func() bool {
 			position197, tokenIndex197 := position, tokenIndex
 			{
 				position198 := position
 				{
 					position199 := position
-					if !_rules[ruleDecInt]() {
+					if !_rules[ruleInt]() {
 						goto l197
 					}
 					if !_rules[ruleExponent]() {
