@@ -169,7 +169,7 @@ func (p *Parser) closeMap() {
 
 func (p *Parser) consumeInteger(str string, base int) {
 	var x big.Int
-	if _, ok := x.SetString(signedText(str, p.sign), 8); !ok {
+	if _, ok := x.SetString(signedText(str, p.sign), base); !ok {
 		panic(fmt.Errorf("malformed base-%d integer: %q", base, str))
 	}
 	p.consume(Integer{&x})
