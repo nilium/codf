@@ -128,7 +128,7 @@ HexDigit <- [[0-9A-F]]
 HexByte  <- HexDigit HexDigit
 
 # Rationals
-Rational <- < Int '/' Int >             { p.consumeRational(text) }
+Rational <- < Int '/' PosInt >          { p.consumeRational(text) }
 
 # Decimals
 Decimal <- PointDecimal                 { p.consumeFloat(text) }

@@ -2004,7 +2004,7 @@ func (p *Parser) Init() {
 			position, tokenIndex = position183, tokenIndex183
 			return false
 		},
-		/* 35 Rational <- <(<(Int '/' Int)> Action17)> */
+		/* 35 Rational <- <(<(Int '/' PosInt)> Action17)> */
 		func() bool {
 			position185, tokenIndex185 := position, tokenIndex
 			{
@@ -2018,7 +2018,7 @@ func (p *Parser) Init() {
 						goto l185
 					}
 					position++
-					if !_rules[ruleInt]() {
+					if !_rules[rulePosInt]() {
 						goto l185
 					}
 					add(rulePegText, position187)
