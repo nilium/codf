@@ -52,8 +52,8 @@ nearest line ending (CRLF, LF, or CR):
 
     ' This is a comment
 
-Supported value types are integers, floats, rationals, strings, symbols,
-booleans, regular expressions, arrays, and maps.
+Supported value types are integers, floats, rationals, durations,
+strings, symbols, booleans, regular expressions, arrays, and maps.
 
 Integers
 --------
@@ -92,6 +92,19 @@ is illegal to use a denominator of zero (0):
 
     rational -5/40; ' -1/8
     rational 0/40;  ' 0/1
+
+Durations
+---------
+
+Durations are expressed as a sequence of integers or decimal numbers
+followed by an interval unit (ns, us, ms, s, m, or h). This is
+compatible with the Go stdlib's durations, but does not allow decimals
+beginning with a period as Go does (e.g., ".5s" -- this has to be
+written as "0.5s" in codf). As with Go, it's valid to use "µs" or "us"
+for microseconds.
+
+    durations 0s -1s 1h 500ms;  ' 0s -1s 1h0m0s 500ms
+    decimals  0.5us 0.5s 0.5ms; ' 500ns 500ms 500µs
 
 Strings
 -------
