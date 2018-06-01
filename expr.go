@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type segmentBox interface {
@@ -342,6 +343,18 @@ func (Bool) expr() {}
 func (b Bool) String() string {
 	return strconv.FormatBool(bool(b))
 }
+
+type Duration time.Duration
+
+func (d Duration) Value() time.Duration {
+	return time.Duration(d)
+}
+
+func (d Duration) String() string {
+	return d.Value().String()
+}
+
+func (d Duration) expr() {}
 
 type Key interface {
 	Expr

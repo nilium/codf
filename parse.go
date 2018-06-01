@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"reflect"
 	"strconv"
+	"time"
 )
 
 const DefaultPrecision uint = 80
@@ -203,4 +204,12 @@ func (p *Parser) parseBase(text string) {
 	if p.baseIntBase, p.err = strconv.Atoi(text); p.err != nil {
 		panic(fmt.Errorf("invalid integer base %q: %v", text, p.err))
 	}
+}
+
+func (p *Parser) consumeDuration(text string) {
+	dur, err := time.ParseDuration(text)
+	if err != nil {
+		panic(fmt.Errorf("malformed duration %q: %v", text, err))
+	}
+	p.consume(Duration(dur))
 }

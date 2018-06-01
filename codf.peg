@@ -49,7 +49,8 @@ ExprList <- Expr ( ReqSpace Expr )*
 ## Literals ##
 ##############
 
-Literal <- { p.sign = 1 } Number
+Literal <- Duration
+        / { p.sign = 1 } Number
 	/ Boolean
 	/ Regexp
 	/ String
@@ -120,7 +121,7 @@ UnicodeShortEscape <- '\\u' HexByte HexByte
 UnicodeWideEscape  <- '\\U' HexByte HexByte HexByte HexByte
 
 # Number
-Number <- Sign? ( Decimal / Rational / Integer )
+Number <- Sign? ( Decimal / Rational / Integer ) !BarewordTail
 
 OctDigit <- [0-8]
 HexDigit <- [[0-9A-F]]
@@ -175,6 +176,18 @@ FalseKw <- 'false' / 'False' / 'FALSE'
 True    <- TrueKw !BarewordTail
 False   <- FalseKw !BarewordTail
 
+# Durations
+Duration <- DurSpec !BarewordTail       { p.consumeDuration(text) }
+
+DurSpec <- < [-+]? (DurNum DurUnit)+ >
+DurNum  <- Int ( '.' Int )?
+DurUnit <- 'ms'
+        / 'ns'
+        / 'us'
+        / 'µs'
+        / 'h'
+        / 'm'
+        / 's'
 
 #################
 ## Punctuation ##
