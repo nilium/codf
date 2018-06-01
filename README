@@ -25,7 +25,16 @@ tool. You can regenerate it by running one of the following:
 
                *** THE FOLLOWING IS SUBJECT TO CHANGE ***
 
-The language supports two forms of structure: sections and statements.
+The language supports two forms of structure: statements and sections.
+
+A statement is a name followed by optional values and terminated by
+a semicolon (;):
+
+    enable-gophers;
+    enable-gophers yes;
+    enable-gophers yes with-butter;
+    ; ' This line doesn't have a statement -- a semicolon on its own is
+      ' an empty statement and does nothing.
 
 A section is a name followed by optional values and braces, enclosing
 further sections or statements:
@@ -37,15 +46,6 @@ further sections or statements:
 
         enable-gophers yes;
     }
-
-A statement is a name followed by optional values and terminated by
-a semicolon (;):
-
-    enable-gophers;
-    enable-gophers yes;
-    enable-gophers yes with-butter;
-    ; ' This line doesn't have a statement -- a semicolon on its own is
-      ' an empty statement and does nothing.
 
 In addition, a comment begins with an apostrophe and extends to the
 nearest line ending (CRLF, LF, or CR):
