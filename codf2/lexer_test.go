@@ -510,3 +510,98 @@ func TestLocationString(t *testing.T) {
 		t.Fatalf("%#+v.String() = %q; want %q", loc, got, want)
 	}
 }
+
+func TestDecimals(t *testing.T) {
+	dec := func(text string) tokenCase {
+		var f big.Float
+		f.SetPrec(DefaultPrecision)
+		if _, ok := f.SetString(text); !ok {
+			panic("error creating float " + text)
+		}
+		return tokenCase{
+			Token: Token{
+				Kind:  TDecimal,
+				Raw:   []byte(text),
+				Value: &f,
+			},
+		}
+	}
+
+	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
+	tokenSeq{
+		_stmt,
+		// Negative sign
+		_ws, dec("-0.0"),
+		_ws, dec("-0.5"),
+		_ws, dec("-0.0e0"),
+		_ws, dec("-0.0E0"),
+		_ws, dec("-1.2345"),
+		_ws, dec("-12345e-4"),
+		_ws, dec("-1.2345e4"),
+		_ws, dec("-1.2345e+4"),
+		// Positive sign
+		_ws, dec("+0.0"),
+		_ws, dec("+0.5"),
+		_ws, dec("+0.0e0"),
+		_ws, dec("+0.0E0"),
+		_ws, dec("+1.2345"),
+		_ws, dec("+12345E-4"),
+		_ws, dec("+1.2345E4"),
+		_ws, dec("+1.2345E+4"),
+		// No sign
+		_ws, _bracketopen, dec("0.0"), _bracketclose,
+		_ws, _mapopen,
+		{Token: Token{Kind: TWord, Value: "k"}},
+		_ws, dec("0.5"),
+		_curlclose,
+		_ws, dec("0.0e0"),
+		_ws, dec("0.0E0"),
+		_ws, dec("1.2345"),
+		_ws, dec("12345e-4"),
+		_ws, dec("1.2345e4"),
+		_ws, dec("1.2345e+4"),
+		_ws, _semicolon,
+		_eof,
+	}.Run(t, `stmt
+			-0.0 -0.5 -0.0e0 -0.0E0
+			-1.2345 -12345e-4 -1.2345e4 -1.2345e+4
+			+0.0 +0.5 +0.0e0 +0.0E0
+			+1.2345 +12345E-4 +1.2345E4 +1.2345E+4
+			[0.0] #{k 0.5} 0.0e0 0.0E0
+			1.2345 12345e-4 1.2345e4 1.2345e+4
+		;`)
+
+	// Check invalid cases...
+
+	// ... with no leading word
+	tokenSeq{_error}.Run(t, `5.5;`)
+	tokenSeq{_error}.Run(t, `5e5;`)
+
+	// ... after a leading word
+	bad := tokenSeq{_stmt, _ws, _error}
+	badValues := []string{
+		`5z`,    // invalid char
+		`5ez`,   // invalid char
+		`5.`,    // eof
+		`5.z`,   // invalid char
+		`5e+z`,  // invalid char
+		`5e-z`,  // invalid char
+		`5e+5z`, // invalid char
+		`5e-5z`, // invalid char
+		`5e+0z`, // invalid char
+		`5e-0z`, // invalid char
+		`0.5e`,  // eof
+		`0.5e+`, // eof
+		`0.5e-`, // eof
+		`0.5e0`, // eof
+		`0.5e9`, // eof
+		`0`,     // eof
+		`5e9`,   // eof
+		`0e9`,   // eof
+		`5e+9`,  // eof
+		`0e+9`,  // eof
+	}
+	for _, c := range badValues {
+		bad.Run(t, "stmt "+c)
+	}
+}

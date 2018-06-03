@@ -12,6 +12,8 @@ import (
 	"unicode"
 )
 
+const DefaultPrecision = 80
+
 var ErrUnexpectedEOF = errors.New("unexpected EOF")
 
 const eof rune = -1
