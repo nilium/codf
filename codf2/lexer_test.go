@@ -627,3 +627,119 @@ func TestDecimals(t *testing.T) {
 		bad.Run(t, "stmt "+c)
 	}
 }
+
+func TestDurations(t *testing.T) {
+	dur := func(text string) tokenCase {
+		d, err := time.ParseDuration(text)
+		if err != nil {
+			panic("error creating duration: " + err.Error())
+		}
+		return tokenCase{
+			Token: Token{
+				Kind:  TDuration,
+				Raw:   []byte(text),
+				Value: d,
+			},
+		}
+	}
+
+	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
+
+	t.Run("Valid", func(t *testing.T) {
+		tokenSeq{
+			_stmt,
+			// Negative sign
+			_ws, dur("-0s"),
+			_ws, dur("-1ns"),
+			_ws, dur("-0ns"),
+			_ws, dur("-0.0s"),
+			_ws, dur("-1h234m7s"),
+			_ws, dur("-1h"),
+			_ws, dur("-60m"),
+			_ws, dur("-0.5s"),
+			_ws, dur("-500ms"),
+			_ws, dur("-0.5ms"),
+			_ws, dur("-500us"),
+			_ws, dur("-500μs"),
+			// Positive sign
+			_ws, dur("+0s"),
+			_ws, dur("+1ns"),
+			_ws, dur("+0ns"),
+			_ws, dur("+0.0s"),
+			_ws, dur("+1h234m7s"),
+			_ws, dur("+1h"),
+			_ws, dur("+60m"),
+			_ws, dur("+0.5s"),
+			_ws, dur("+500ms"),
+			_ws, dur("+0.5ms"),
+			_ws, dur("+500us"),
+			_ws, dur("+500μs"),
+			// No sign
+			_ws, dur("0s"),
+			_ws, dur("1ns"),
+			_ws, dur("0ns"),
+			_ws, dur("0.0s"),
+			_ws, dur("1h234m7s"),
+			_ws, dur("1h"),
+			_ws, dur("60m"),
+			_ws, dur("0.5s"),
+			_ws, dur("500ms"),
+			_ws, dur("0.5ms"),
+			_ws, dur("500us"),
+			_ws, dur("500μs"),
+			_ws, dur("1h0.25m"),
+			_ws, dur("1h0m0.0s"),
+			_ws, _semicolon,
+			_eof,
+		}.Run(t, `stmt
+			-0s -1ns -0ns -0.0s
+			-1h234m7s -1h -60m
+			-0.5s -500ms
+			-0.5ms -500us -500μs
+			+0s +1ns +0ns +0.0s
+			+1h234m7s +1h +60m
+			+0.5s +500ms
+			+0.5ms +500us +500μs
+			0s 1ns 0ns 0.0s
+			1h234m7s 1h 60m
+			0.5s 500ms
+			0.5ms 500us 500μs
+			1h0.25m
+			1h0m0.0s
+		;`)
+	})
+
+	// Check invalid cases...
+
+	// ... with no leading word
+	tokenSeq{_error}.Run(t, `5ms;`)
+	tokenSeq{_error}.Run(t, `5h;`)
+
+	// ... after a leading word
+	bad := tokenSeq{_stmt, _ws, _error}
+	badValues := []string{
+		`1m`,
+		`1mz`,
+		`1h0`,
+		`1h00`,
+		`1h0z`,
+		`1h0.0`,
+		`1h0.1`,
+		`1h0;`,
+		`1h0.`,
+		`1h0.5`,
+		`1h0.5n`,
+		`1h0.;`,
+		`1h0.5;`,
+		`1h0.5n;`,
+		`1h0u`,
+		`1h0u;`,
+		`1h0.5`,
+		`1h0.0z`,
+	}
+	for _, c := range badValues {
+		t.Run(c, func(t *testing.T) {
+			bad.Run(t, "stmt "+c)
+		})
+	}
+}
