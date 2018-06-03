@@ -236,21 +236,6 @@ func (l *Lexer) token(kind TokenKind, takeBuffer bool) Token {
 	return tok
 }
 
-func (l *Lexer) peek() (r rune, err error) {
-	if l.pending {
-		return l.lastScan.r, l.lastScan.err
-	}
-
-	sym, _, err := l.scanner.ReadRune()
-	if err != nil && err != io.EOF {
-		return 0, err
-	}
-	if err == io.EOF {
-		return eof, nil
-	}
-	return sym, l.scanner.UnreadRune()
-}
-
 func (l *Lexer) readRune() (r rune, err error) {
 	if l.pending {
 		l.pending = false
