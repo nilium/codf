@@ -190,7 +190,7 @@ func TestBooleans(t *testing.T) {
 
 func TestStatement(t *testing.T) {
 	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
 		_ws, {Token: Token{Kind: TInteger, Raw: []byte("-1234"), Value: big.NewInt(-1234)}},
 		_ws, {Token: Token{Kind: TOctal, Raw: []byte("+0600"), Value: big.NewInt(0600)}},
 		_ws, {Token: Token{Kind: THex, Raw: []byte("-0xf"), Value: big.NewInt(-15)}},
@@ -198,8 +198,25 @@ func TestStatement(t *testing.T) {
 		_semicolon,
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("stmt/2"), Value: "stmt/2"}},
 		_semicolon,
-		_eof,
-	}.Run(t, "stmt -1234 +0600 -0xf 0x12f;\nstmt/2;")
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("sect"), Value: "sect"}},
+		_curlopen, _curlclose,
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("a"), Value: "a"}},
+		_semicolon,
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("b"), Value: "b"}},
+		_curlopen, _curlclose,
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("c"), Value: "c"}},
+		_comment,
+		_ws, _semicolon, _semicolon,
+		_ws, _eof,
+	}.Run(t, `
+		stmt -1234 +0600 -0xf 0x12f;
+		stmt/2;
+		sect{}
+		a;
+		b{}
+		c'foo
+		;;
+		`)
 }
 
 func TestSectionDoubleClose(t *testing.T) {
