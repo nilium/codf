@@ -397,3 +397,45 @@ func TestIntegers(t *testing.T) {
 			 36#ya
 		;`)
 }
+
+func TestRationals(t *testing.T) {
+	zero := big.NewRat(0, 1)
+	neg := big.NewRat(-3, 4)
+	pos := big.NewRat(3, 4)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		// Zero
+		_ws, {Token: Token{Kind: TRational, Value: zero, Raw: []byte("0/100")}},
+		_ws, {Token: Token{Kind: TRational, Value: zero, Raw: []byte("-0/200")}},
+		_ws, {Token: Token{Kind: TRational, Value: zero, Raw: []byte("-0/1")}},
+		_ws, {Token: Token{Kind: TRational, Value: zero, Raw: []byte("0/1")}},
+		// Negative sign
+		_ws, {Token: Token{Kind: TRational, Value: neg, Raw: []byte("-3/4")}},
+		_ws, {Token: Token{Kind: TRational, Value: neg, Raw: []byte("-6/8")}},
+		_ws, {Token: Token{Kind: TRational, Value: neg, Raw: []byte("-75/100")}},
+		// Positive sign
+		_ws, {Token: Token{Kind: TRational, Value: pos, Raw: []byte("+3/4")}},
+		_ws, {Token: Token{Kind: TRational, Value: pos, Raw: []byte("+6/8")}},
+		_ws, {Token: Token{Kind: TRational, Value: pos, Raw: []byte("+75/100")}},
+		// No sign
+		_ws, {Token: Token{Kind: TRational, Value: pos, Raw: []byte("3/4")}},
+		_ws, {Token: Token{Kind: TRational, Value: pos, Raw: []byte("6/8")}},
+		_ws, {Token: Token{Kind: TRational, Value: pos, Raw: []byte("75/100")}},
+		_ws, _semicolon,
+		_eof,
+	}.Run(t, `stmt
+			 0/100
+			-0/200
+			-0/1
+			 0/1
+			-3/4
+			-6/8
+			-75/100
+			+3/4
+			+6/8
+			+75/100
+			 3/4
+			 6/8
+			 75/100
+		;`)
+}
