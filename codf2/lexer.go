@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -340,6 +341,25 @@ func isStatementSep(r rune) bool {
 		r == '\''
 }
 
+func isLongIntervalInitial(r rune) bool {
+	return r == 'n' || // 'ns'
+		r == 'u' || // 'us'
+		r == 'μ' // 'μs'
+}
+
+func isIntervalInitial(r rune) bool {
+	return r == 's' || // 's'
+		r == 'n' || // 'ns'
+		r == 'h' || // 'h'
+		r == 'm' || // 'ms' | 'm'
+		r == 'u' || // 'us'
+		r == 'μ' // 'μs'
+}
+
+func isMaybeLongIntervalInitial(r rune) bool {
+	return r == 'm' // 'ms' | 'm'
+}
+
 func isSign(r rune) bool {
 	return r == '-' || r == '+'
 }
@@ -629,11 +649,110 @@ func (l *Lexer) lexDecimalPoint(r rune) (Token, consumerFunc, error) {
 	case r == 'E' || r == 'e': // exponent
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentUnsigned, nil
+	case isIntervalInitial(r):
+		return l.lexIntervalConsumer(r)
 	case !isDecimal(r):
 		return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
 	}
 	l.buffer(r, r)
 	return noToken, l.lexDecimalPoint, nil
+}
+
+func parseDuration(tok Token) (Token, error) {
+	text := tok.Value.(string)
+	d, err := time.ParseDuration(text)
+	if err != nil {
+		return tok, fmt.Errorf("malformed duration %q: %s", text, err)
+	}
+	tok.Value = d
+	return tok, nil
+}
+
+func (l *Lexer) lexIntervalConsumer(r rune) (Token, consumerFunc, error) {
+	l.buffer(r, r)
+	if isLongIntervalInitial(r) {
+		return noToken, l.lexIntervalUnitLong, nil
+	} else if isMaybeLongIntervalInitial(r) {
+		return noToken, l.lexIntervalUnitMaybeLong, nil
+	}
+	return noToken, l.lexInterval, nil
+}
+
+func (l *Lexer) lexIntervalUnitMaybeLong(r rune) (Token, consumerFunc, error) {
+	if r == eof {
+		return noToken, l.lexIntervalUnitMaybeLong, ErrUnexpectedEOF
+	} else if isStatementSep(r) {
+		return l.lexInterval(r)
+	} else if !(r == 's' || isDecimal(r)) {
+		return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or 's'", r)
+	}
+	l.buffer(r, r)
+	return noToken, l.lexInterval, nil
+}
+
+func (l *Lexer) lexIntervalUnitLong(r rune) (Token, consumerFunc, error) {
+	if r == eof {
+		return noToken, l.lexIntervalUnitLong, ErrUnexpectedEOF
+	} else if r != 's' {
+		return noToken, nil, fmt.Errorf("unexpected character %q: expected 's'", r)
+	}
+	l.buffer(r, r)
+	return noToken, l.lexInterval, nil
+}
+
+func (l *Lexer) lexIntervalDecimalInitial(r rune) (Token, consumerFunc, error) {
+	switch {
+	case r == eof:
+		return noToken, l.lexIntervalDecimalInitial, ErrUnexpectedEOF
+	case r == '0':
+		l.buffer(r, r)
+		return noToken, l.lexIntervalZero, nil
+	case isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexIntervalDecimalTail, nil
+	}
+	return noToken, l.lexIntervalDecimalInitial, fmt.Errorf("unexpected character %q: expected decimal number", r)
+}
+
+func (l *Lexer) lexIntervalDecimalTail(r rune) (Token, consumerFunc, error) {
+	if r == eof {
+		return noToken, l.lexIntervalDecimalTail, ErrUnexpectedEOF
+	} else if isIntervalInitial(r) {
+		return l.lexIntervalConsumer(r)
+	} else if isDecimal(r) {
+		l.buffer(r, r)
+		return noToken, l.lexIntervalDecimalTail, nil
+	}
+	return noToken, l.lexIntervalDecimalTail, fmt.Errorf("unexpected character %s: expected digit or interval unit", TDuration)
+}
+
+func (l *Lexer) lexIntervalZero(r rune) (Token, consumerFunc, error) {
+	if r == eof {
+		return noToken, l.lexIntervalZero, ErrUnexpectedEOF
+	} else if isIntervalInitial(r) {
+		return l.lexIntervalConsumer(r)
+	}
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected interval unit", r)
+}
+
+func (l *Lexer) lexInterval(r rune) (Token, consumerFunc, error) {
+	switch {
+	case r == eof:
+		return noToken, l.lexInterval, ErrUnexpectedEOF
+	case r == '.':
+		l.buffer(r, r)
+		return noToken, l.lexIntervalDecimalInitial, nil
+	case isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexInterval, nil
+	case isStatementSep(r):
+		l.unread()
+		tok, err := l.valueToken(TDuration, parseDuration)
+		return tok, l.lexStatement, err
+	case isIntervalInitial(r):
+		return l.lexIntervalConsumer(r)
+	}
+	return noToken, l.lexInterval, fmt.Errorf("unexpected character %q: expected number or interval unit", r)
 }
 
 func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
@@ -657,11 +776,13 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case r == '.':
 		l.buffer(r, r)
 		return noToken, l.lexDecimalPoint, nil
+	case isIntervalInitial(r):
+		return l.lexIntervalConsumer(r)
 	case r == 'E' || r == 'e':
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentUnsigned, nil
 	}
-	return noToken, nil, fmt.Errorf("unexpected character %q: expected b, x, X, octal, or separator", r)
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected b, x, X, octal, duration unit, or separator", r)
 }
 
 func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
@@ -673,6 +794,8 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexNonZero, nil
+	case isIntervalInitial(r):
+		return l.lexIntervalConsumer(r)
 	}
 
 	switch r {
