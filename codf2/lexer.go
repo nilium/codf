@@ -107,6 +107,12 @@ type Location struct {
 	Column int
 }
 
+func (l Location) String() string {
+	return strconv.Itoa(l.Line) +
+		":" + strconv.Itoa(l.Column) +
+		"@" + strconv.Itoa(l.Offset)
+}
+
 func (l Location) add(r rune, size int) Location {
 	if size < 1 {
 		return l

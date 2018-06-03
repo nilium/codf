@@ -498,3 +498,15 @@ func TestRationals(t *testing.T) {
 		_ws, _error,
 	}.Run(t, `stmt 5/1`)
 }
+
+func TestLocationString(t *testing.T) {
+	const want = "2:34@45"
+	loc := Location{
+		Line:   2,
+		Column: 34,
+		Offset: 45,
+	}
+	if got := loc.String(); got != want {
+		t.Fatalf("%#+v.String() = %q; want %q", loc, got, want)
+	}
+}
