@@ -318,6 +318,24 @@ func TestBaseInteger(t *testing.T) {
 			},
 		}).Run(t)
 	}
+
+	// Invalid things
+	badtext := []string{
+		`0#0`,
+		`1#0`,
+		`37#zz`,
+	}
+
+	bad := tokenSeq{
+		{Token: Token{Kind: TWord, Value: "stmt"}},
+		_ws, _error,
+	}
+
+	for _, c := range badtext {
+		t.Run(c, func(t *testing.T) {
+			bad.Run(t, `stmt `+c+`;`)
+		})
+	}
 }
 
 func TestInvalidStrings(t *testing.T) {
