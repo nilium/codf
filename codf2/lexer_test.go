@@ -78,9 +78,17 @@ type tokenCase struct {
 	Err bool
 }
 
+// Common punctuation tokens
 var (
-	ws        = tokenCase{Token: Token{Kind: TWhitespace}}
-	semicolon = tokenCase{Token: Token{Kind: TSemicolon}}
+	_ws           = tokenCase{Token: Token{Kind: TWhitespace}}
+	_eof          = tokenCase{Token: Token{Kind: TEOF}}
+	_semicolon    = tokenCase{Token: Token{Kind: TSemicolon}}
+	_curlopen     = tokenCase{Token: Token{Kind: TCurlOpen}}
+	_curlclose    = tokenCase{Token: Token{Kind: TCurlClose}}
+	_bracketopen  = tokenCase{Token: Token{Kind: TBracketOpen}}
+	_bracketclose = tokenCase{Token: Token{Kind: TBracketClose}}
+	_mapopen      = tokenCase{Token: Token{Kind: TMapOpen}}
+	_comment      = tokenCase{Token: Token{Kind: TComment}}
 )
 
 type tokenSeq []tokenCase
@@ -127,15 +135,9 @@ func (tt *tokenSeqTest) Run(t *testing.T) {
 
 func TestComment(t *testing.T) {
 	tokenSeq{
-		{Token: Token{
-			Kind: TComment,
-			Raw:  []byte(""),
-		}},
-		{Token: Token{
-			Kind: TComment,
-			Raw:  []byte(" foo bar baz"),
-		}},
-		{Token: Token{Kind: TEOF}},
+		{Token: Token{Kind: TComment, Raw: []byte("")}},
+		{Token: Token{Kind: TComment, Raw: []byte(" foo bar baz")}},
+		_eof,
 	}.Run(t, "'\n' foo bar baz")
 }
 
@@ -153,14 +155,11 @@ func TestBareword(t *testing.T) {
 			End:   Location{Offset: 18, Line: 1, Column: 19},
 			Value: ".foo$bar#baz=quux",
 		}},
-		{Token: Token{Kind: TSemicolon}},
+		_semicolon,
 		{Token: Token{Kind: TWhitespace}},
-		{Token: Token{
-			Kind: TComment,
-			Raw:  []byte(" foo"),
-		}},
+		{Token: Token{Kind: TComment, Raw: []byte(" foo")}},
 		{Token: Token{Kind: TWhitespace}},
-		{Token: Token{Kind: TEOF}},
+		_eof,
 	}.Run(t, "\t.foo$bar#baz=quux; ' foo\n\n")
 }
 
@@ -178,210 +177,70 @@ func TestWhitespace(t *testing.T) {
 
 func TestBooleans(t *testing.T) {
 	tokenSeq{
-		{
-			Token: Token{
-				Kind:  TWord,
-				Raw:   []byte("TRUE"),
-				Value: "TRUE",
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TBoolean,
-				Raw:   []byte("true"),
-				Value: true,
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TBoolean,
-				Raw:   []byte("Yes"),
-				Value: true,
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TBoolean,
-				Raw:   []byte("FALSE"),
-				Value: false,
-			},
-		},
-		{Token: Token{Kind: TCurlOpen}},
-		{Token: Token{Kind: TCurlClose}},
-		{Token: Token{Kind: TEOF}},
+		{Token: Token{Kind: TWord, Raw: []byte("TRUE"), Value: "TRUE"}},
+		_ws, {Token: Token{Kind: TBoolean, Raw: []byte("true"), Value: true}},
+		_ws, {Token: Token{Kind: TBoolean, Raw: []byte("Yes"), Value: true}},
+		_ws, {Token: Token{Kind: TBoolean, Raw: []byte("FALSE"), Value: false}},
+		_curlopen,
+		_curlclose,
+		_eof,
 	}.Run(t, "TRUE true Yes FALSE{}")
 }
 
 func TestStatement(t *testing.T) {
 	tokenSeq{
-		{
-			Token: Token{
-				Kind:  TWord,
-				Raw:   []byte("stmt"),
-				Value: "stmt",
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TInteger,
-				Raw:   []byte("-1234"),
-				Value: big.NewInt(-1234),
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TOctal,
-				Raw:   []byte("+0600"),
-				Value: big.NewInt(0600),
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  THex,
-				Raw:   []byte("-0xf"),
-				Value: big.NewInt(-15),
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  THex,
-				Raw:   []byte("0x12f"),
-				Value: big.NewInt(303),
-			},
-		},
-		semicolon,
-		ws,
-	}.Run(t, "stmt -1234 +0600 -0xf 0x12f;\n")
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, {Token: Token{Kind: TInteger, Raw: []byte("-1234"), Value: big.NewInt(-1234)}},
+		_ws, {Token: Token{Kind: TOctal, Raw: []byte("+0600"), Value: big.NewInt(0600)}},
+		_ws, {Token: Token{Kind: THex, Raw: []byte("-0xf"), Value: big.NewInt(-15)}},
+		_ws, {Token: Token{Kind: THex, Raw: []byte("0x12f"), Value: big.NewInt(303)}},
+		_semicolon,
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("stmt/2"), Value: "stmt/2"}},
+		_semicolon,
+		_eof,
+	}.Run(t, "stmt -1234 +0600 -0xf 0x12f;\nstmt/2;")
 }
 
 func TestSectionDoubleClose(t *testing.T) {
 	tokenSeq{
-		{
-			Token: Token{
-				Kind:  TWord,
-				Raw:   []byte("stmt"),
-				Value: "stmt",
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TWord,
-				Raw:   []byte("foo"),
-				Value: "foo",
-			},
-		},
-		ws,
-		{Token: Token{Kind: TBracketOpen}},
-		{
-			Token: Token{
-				Kind:  TInteger,
-				Raw:   []byte("1"),
-				Value: big.NewInt(1),
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TInteger,
-				Raw:   []byte("2"),
-				Value: big.NewInt(2),
-			},
-		},
-		ws,
-		{
-			Token: Token{
-				Kind:  TInteger,
-				Raw:   []byte("3"),
-				Value: big.NewInt(3),
-			},
-		},
-		{Token: Token{Kind: TBracketClose}},
-		ws,
-		{Token: Token{Kind: TMapOpen}},
-		{Token: Token{Kind: TCurlClose}},
-		ws,
-		{Token: Token{Kind: TCurlOpen}},
-		ws,
-		semicolon,
-		ws,
-		{Token: Token{Kind: TCurlClose}},
-		ws,
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("foo"), Value: "foo"}},
+		_ws, _bracketopen, _bracketopen,
+		{Token: Token{Kind: TInteger, Raw: []byte("1"), Value: big.NewInt(1)}},
+		_ws, {Token: Token{Kind: TInteger, Raw: []byte("2"), Value: big.NewInt(2)}},
+		_bracketclose,
+		_ws, {Token: Token{Kind: TInteger, Raw: []byte("3"), Value: big.NewInt(3)}},
+		_bracketclose,
+		_ws, _mapopen, _curlclose,
+		_ws, _curlopen,
+		_ws, _semicolon,
+		_ws, _curlclose,
+		_ws,
 		{Err: true},
-	}.Run(t, "stmt foo [1 2 3] #{} { ; } }")
+	}.Run(t, "stmt foo [[1 2] 3] #{} { ; } }")
 }
 
 func TestRegexp(t *testing.T) {
+	regex := regexp.MustCompile
 	tokenSeq{
-		{Token: Token{
-			Kind:  TWord,
-			Raw:   []byte("stmt"),
-			Value: "stmt",
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TRegexp,
-			Raw:   []byte("#/foo\\/bar\n/"),
-			Value: regexp.MustCompile("foo/bar\n"),
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TRegexp,
-			Raw:   []byte("#//"),
-			Value: regexp.MustCompile(""),
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TRegexp,
-			Raw:   []byte("#/\\./"),
-			Value: regexp.MustCompile("\\."),
-		}},
-		semicolon,
-		{Token: Token{Kind: TEOF}},
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#/foo\\/bar\n/"), Value: regex("foo/bar\n")}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#//"), Value: regex("")}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#/\\./"), Value: regex("\\.")}},
+		_semicolon,
+		_eof,
 	}.Run(t, "stmt #/foo\\/bar\n/ #// #/\\./;")
 }
 
 func TestString(t *testing.T) {
 	tokenSeq{
-		{Token: Token{
-			Kind:  TWord,
-			Raw:   []byte("stmt"),
-			Value: "stmt",
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TString,
-			Raw:   []byte(`""`),
-			Value: "",
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TString,
-			Raw:   []byte(`"simple string"`),
-			Value: "simple string",
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TString,
-			Raw:   []byte(`"\a\b\f\n\r\t\v\\\""`),
-			Value: "\a\b\f\n\r\t\v\\\"",
-		}},
-		ws,
-		{Token: Token{
-			Kind:  TString,
-			Raw:   []byte(`"\123\xff\u7fff\U00001234"`),
-			Value: "\123\xff\u7fff\U00001234",
-		}},
-		ws,
-		semicolon,
-		{Token: Token{Kind: TEOF}},
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, {Token: Token{Kind: TString, Raw: []byte(`""`), Value: ""}},
+		_ws, {Token: Token{Kind: TString, Raw: []byte(`"simple string"`), Value: "simple string"}},
+		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\a\b\f\n\r\t\v\\\""`), Value: "\a\b\f\n\r\t\v\\\""}},
+		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\123\xff\u7fff\U00001234"`), Value: "\123\xff\u7fff\U00001234"}},
+		_ws, _semicolon,
+		_eof,
 	}.Run(t,
 		`stmt   ""
 			"simple string"
@@ -408,14 +267,11 @@ func TestBaseInteger(t *testing.T) {
 			Input: stmt,
 			Seq: tokenSeq{
 				{Token: Token{Kind: TWord, Value: "stmt"}},
-				ws,
-				{Token: tok},
-				ws,
-				{Token: Token{Kind: TWord, Value: "foo"}},
-				ws,
-				{Token: Token{Kind: TInteger, Value: big.NewInt(0)}},
-				semicolon,
-				{Token: Token{Kind: TEOF}},
+				_ws, {Token: tok},
+				_ws, {Token: Token{Kind: TWord, Value: "foo"}},
+				_ws, {Token: Token{Kind: TInteger, Value: big.NewInt(0)}},
+				_semicolon,
+				_eof,
 			},
 		}).Run(t)
 	}
@@ -428,13 +284,13 @@ func TestInvalidStrings(t *testing.T) {
 			Raw:   []byte("stmt"),
 			Value: "stmt",
 		}},
-		ws,
+		_ws,
 		{Err: true},
 	}
 
 	cases := []tokenSeqTest{
 		{Name: "EOF", Input: `stmt "`},
-		{Name: "BadContext", Input: ` ""`, Seq: tokenSeq{ws, {Err: true}}},
+		{Name: "BadContext", Input: ` ""`, Seq: tokenSeq{_ws, {Err: true}}},
 		{Name: "Octal-Invalid", Input: `stmt "\60z";`},
 		{Name: "Octal-Invalid", Input: `stmt "\608";`},
 		{Name: "Octal-EOF", Input: `stmt "\`},
@@ -460,4 +316,78 @@ func TestInvalidStrings(t *testing.T) {
 		}
 		c.Run(t)
 	}
+}
+
+func TestIntegers(t *testing.T) {
+	neg := big.NewInt(-1234)
+	pos := big.NewInt(1234)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		// Negative sign
+		_ws, {Token: Token{Kind: TBinary, Value: neg, Raw: []byte("-0b10011010010")}},
+		_ws, {Token: Token{Kind: TBinary, Value: neg, Raw: []byte("-0B10011010010")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-2#10011010010")}},
+		_ws, {Token: Token{Kind: TOctal, Value: neg, Raw: []byte("-02322")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-8#2322")}},
+		_ws, {Token: Token{Kind: TInteger, Value: neg, Raw: []byte("-1234")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-10#1234")}},
+		_ws, {Token: Token{Kind: THex, Value: neg, Raw: []byte("-0x4d2")}},
+		_ws, {Token: Token{Kind: THex, Value: neg, Raw: []byte("-0X4D2")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-16#4D2")}},
+		// Positive sign
+		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("+0b10011010010")}},
+		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("+0B10011010010")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("+2#10011010010")}},
+		_ws, {Token: Token{Kind: TOctal, Value: pos, Raw: []byte("+02322")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("+8#2322")}},
+		_ws, {Token: Token{Kind: TInteger, Value: pos, Raw: []byte("+1234")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("+10#1234")}},
+		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("+0x4d2")}},
+		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("+0X4D2")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("+16#4D2")}},
+		// No sign
+		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("0b10011010010")}},
+		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("0B10011010010")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("2#10011010010")}},
+		_ws, {Token: Token{Kind: TOctal, Value: pos, Raw: []byte("02322")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("8#2322")}},
+		_ws, {Token: Token{Kind: TInteger, Value: pos, Raw: []byte("1234")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("10#1234")}},
+		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("0x4d2")}},
+		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("0X4D2")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("16#4D2")}},
+		_ws, _semicolon,
+		_eof,
+	}.Run(t, `stmt
+			-0b10011010010
+			-0B10011010010
+			-2#10011010010
+			-02322
+			-8#2322
+			-1234
+			-10#1234
+			-0x4d2
+			-0X4D2
+			-16#4D2
+			+0b10011010010
+			+0B10011010010
+			+2#10011010010
+			+02322
+			+8#2322
+			+1234
+			+10#1234
+			+0x4d2
+			+0X4D2
+			+16#4D2
+			 0b10011010010
+			 0B10011010010
+			 2#10011010010
+			 02322
+			 8#2322
+			 1234
+			 10#1234
+			 0x4d2
+			 0X4D2
+			 16#4D2
+		;`)
 }
