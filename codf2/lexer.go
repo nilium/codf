@@ -516,6 +516,40 @@ func (l *Lexer) lexBinnum(r rune) (Token, consumerFunc, error) {
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected binary digit or separator", r)
 }
 
+func parseRational(t Token) (Token, error) {
+	var x big.Rat
+	text := t.Value.(string)
+	if _, ok := x.SetString(text); !ok {
+		return t, fmt.Errorf("malformed rational %q", text)
+	}
+	t.Value = &x
+	return t, nil
+}
+
+func (l *Lexer) lexRationalDenomInitial(r rune) (Token, consumerFunc, error) {
+	switch {
+	case r >= '1' && r <= '9':
+		l.buffer(r, r)
+		return noToken, l.lexRationalDenomTail, nil
+	case r == eof:
+		return noToken, l.lexRationalDenomInitial, ErrUnexpectedEOF
+	}
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected positive number", r)
+}
+
+func (l *Lexer) lexRationalDenomTail(r rune) (Token, consumerFunc, error) {
+	switch {
+	case isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexRationalDenomTail, nil
+	case r == eof:
+		return noToken, l.lexRationalDenomTail, ErrUnexpectedEOF
+	}
+	l.unread()
+	tok, err := l.valueToken(TRational, parseRational)
+	return tok, l.lexStatement, err
+}
+
 func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	switch {
 	case unicode.IsSpace(r),
@@ -526,6 +560,9 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case isOctal(r):
 		l.buffer(r, r)
 		return noToken, l.lexOctalNumber, nil
+	case r == '/':
+		l.buffer(r, r)
+		return noToken, l.lexRationalDenomInitial, nil
 	case r == 'b' || r == 'B':
 		l.buffer(r, -1)
 		return noToken, l.lexBinnum, nil
@@ -564,6 +601,9 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 
 		l.strbuf.Reset()
 		return noToken, l.lexBaseNumber(neg, base), nil
+	case '/':
+		l.buffer(r, r)
+		return noToken, l.lexRationalDenomInitial, nil
 	case ';', '{', '\'', '}', ']':
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
