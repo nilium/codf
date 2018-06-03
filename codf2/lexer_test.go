@@ -334,6 +334,7 @@ func TestIntegers(t *testing.T) {
 		_ws, {Token: Token{Kind: THex, Value: neg, Raw: []byte("-0x4d2")}},
 		_ws, {Token: Token{Kind: THex, Value: neg, Raw: []byte("-0X4D2")}},
 		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-16#4D2")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-36#ya")}},
 		// Positive sign
 		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("+0b10011010010")}},
 		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("+0B10011010010")}},
@@ -345,6 +346,7 @@ func TestIntegers(t *testing.T) {
 		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("+0x4d2")}},
 		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("+0X4D2")}},
 		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("+16#4D2")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("+36#ya")}},
 		// No sign
 		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("0b10011010010")}},
 		_ws, {Token: Token{Kind: TBinary, Value: pos, Raw: []byte("0B10011010010")}},
@@ -356,6 +358,7 @@ func TestIntegers(t *testing.T) {
 		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("0x4d2")}},
 		_ws, {Token: Token{Kind: THex, Value: pos, Raw: []byte("0X4D2")}},
 		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("16#4D2")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: pos, Raw: []byte("36#ya")}},
 		_ws, _semicolon,
 		_eof,
 	}.Run(t, `stmt
@@ -369,6 +372,7 @@ func TestIntegers(t *testing.T) {
 			-0x4d2
 			-0X4D2
 			-16#4D2
+			-36#ya
 			+0b10011010010
 			+0B10011010010
 			+2#10011010010
@@ -379,6 +383,7 @@ func TestIntegers(t *testing.T) {
 			+0x4d2
 			+0X4D2
 			+16#4D2
+			+36#ya
 			 0b10011010010
 			 0B10011010010
 			 2#10011010010
@@ -389,5 +394,6 @@ func TestIntegers(t *testing.T) {
 			 0x4d2
 			 0X4D2
 			 16#4D2
+			 36#ya
 		;`)
 }
