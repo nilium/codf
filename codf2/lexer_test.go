@@ -80,6 +80,7 @@ type tokenCase struct {
 
 // Common punctuation tokens
 var (
+	_error        = tokenCase{Err: true}
 	_ws           = tokenCase{Token: Token{Kind: TWhitespace}}
 	_eof          = tokenCase{Token: Token{Kind: TEOF}}
 	_semicolon    = tokenCase{Token: Token{Kind: TSemicolon}}
@@ -215,8 +216,7 @@ func TestSectionDoubleClose(t *testing.T) {
 		_ws, _curlopen,
 		_ws, _semicolon,
 		_ws, _curlclose,
-		_ws,
-		{Err: true},
+		_ws, _error,
 	}.Run(t, "stmt foo [[1 2] 3] #{} { ; } }")
 }
 
@@ -230,6 +230,32 @@ func TestRegexp(t *testing.T) {
 		_semicolon,
 		_eof,
 	}.Run(t, "stmt #/foo\\/bar\n/ #// #/\\./;")
+
+	// Fail on EOF at points in regexp parsing
+	// EOF after pound
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, _error,
+	}.Run(t, "stmt #")
+
+	// EOF in regexp (start)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, _error,
+	}.Run(t, "stmt #/")
+
+	// EOF in regexp (middle)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, _error,
+	}.Run(t, "stmt #/foobar")
+
+	// EOF in statement
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#/foobar/"), Value: regex("foobar")}},
+		_error,
+	}.Run(t, "stmt #/foobar/")
 }
 
 func TestString(t *testing.T) {
@@ -284,13 +310,12 @@ func TestInvalidStrings(t *testing.T) {
 			Raw:   []byte("stmt"),
 			Value: "stmt",
 		}},
-		_ws,
-		{Err: true},
+		_ws, _error,
 	}
 
 	cases := []tokenSeqTest{
 		{Name: "EOF", Input: `stmt "`},
-		{Name: "BadContext", Input: ` ""`, Seq: tokenSeq{_ws, {Err: true}}},
+		{Name: "BadContext", Input: ` ""`, Seq: tokenSeq{_ws, _error}},
 		{Name: "Octal-Invalid", Input: `stmt "\60z";`},
 		{Name: "Octal-Invalid", Input: `stmt "\608";`},
 		{Name: "Octal-EOF", Input: `stmt "\`},
@@ -438,4 +463,21 @@ func TestRationals(t *testing.T) {
 			 6/8
 			 75/100
 		;`)
+
+	// Zero denominator -> error
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, _error,
+	}.Run(t, `stmt 5/0;`)
+
+	// Fail on EOF in rational (needs a sentinel)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, _error,
+	}.Run(t, `stmt 5/`)
+
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_ws, _error,
+	}.Run(t, `stmt 5/1`)
 }
