@@ -502,6 +502,20 @@ func (l *Lexer) lexHexnum(r rune) (Token, consumerFunc, error) {
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected hex digit or separator", r)
 }
 
+func (l *Lexer) lexBinnum(r rune) (Token, consumerFunc, error) {
+	switch {
+	case unicode.IsSpace(r),
+		r == ';' || r == '{' || r == '\'':
+		l.unread()
+		tok, err := l.valueToken(TBinary, parseBaseInt(2))
+		return tok, l.lexStatement, err
+	case isBinary(r):
+		l.buffer(r, r)
+		return noToken, l.lexBinnum, nil
+	}
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected binary digit or separator", r)
+}
+
 func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	switch {
 	case unicode.IsSpace(r),
@@ -512,9 +526,9 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case isOctal(r):
 		l.buffer(r, r)
 		return noToken, l.lexOctalNumber, nil
-	case r == 'b':
+	case r == 'b' || r == 'B':
 		l.buffer(r, -1)
-		return noToken, nil, errors.New("unimplemented: bin number")
+		return noToken, l.lexBinnum, nil
 	case r == 'x' || r == 'X':
 		l.buffer(r, -1)
 		return noToken, l.lexHexnum, nil
