@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func compareValue(l, r interface{}) bool {
@@ -19,6 +20,9 @@ func compareValue(l, r interface{}) bool {
 		return ok && ll == rr
 	case string:
 		rr, ok := r.(string)
+		return ok && ll == rr
+	case time.Duration:
+		rr, ok := r.(time.Duration)
 		return ok && ll == rr
 	case *big.Int:
 		rr, ok := r.(*big.Int)
