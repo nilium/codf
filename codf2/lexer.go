@@ -46,8 +46,8 @@ const (
 	TRegexp  // '#/' ( '\\/' | [^/] )* '/'
 	TString  // '"' ( Escape | [^"] )* '"'
 
-	// TBoolean is not lexed and only produced by a parser inspecting and modifying a token to
-	// become a TBoolean.
+	// TBoolean is produced when the lexer encounters a boolean word in the middle of
+	// a statement (i.e., after the first word and before a ; or {)
 	TBoolean // Title/lower/UPPER of: 'true' | 'false' | 'yes' | 'no
 
 	// All numbers may implicitly begin with '-' or '+'
