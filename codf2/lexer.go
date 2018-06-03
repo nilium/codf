@@ -157,6 +157,8 @@ func (e embedType) String() string {
 }
 
 type Lexer struct {
+	Precision uint
+
 	scanner io.RuneScanner
 
 	pending  bool
@@ -311,8 +313,6 @@ func (l *Lexer) scanPos() Location {
 
 // Rune cases
 
-var isSpace = unicode.IsSpace
-
 func isBarewordInitial(r rune) bool {
 	switch r {
 	case '=', '<', '>', '.', '?', '/', '!', '@', '$', '%', '^', '&', '*', ':', '|', '_':
@@ -328,6 +328,16 @@ func isBarewordTail(r rune) bool {
 		return true
 	}
 	return unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+func isStatementSep(r rune) bool {
+	return unicode.IsSpace(r) ||
+		r == ';' ||
+		r == '{' ||
+		r == '}' ||
+		r == '[' ||
+		r == ']' ||
+		r == '\''
 }
 
 func isSign(r rune) bool {
@@ -432,7 +442,7 @@ func (l *Lexer) lexSegmentTail(r rune) (Token, consumerFunc, error) {
 	l.unread()
 	switch {
 	case r == eof:
-		return noToken, l.lexSegment, nil
+		return noToken, l.lexSegmentTail, ErrUnexpectedEOF
 	case unicode.IsSpace(r):
 		return noToken, l.lexStatement, nil
 	case r == ';':
@@ -469,8 +479,7 @@ func parseBaseInt(base int) convertFunc {
 
 func (l *Lexer) lexOctalNumber(r rune) (Token, consumerFunc, error) {
 	switch {
-	case unicode.IsSpace(r),
-		r == ';' || r == '{' || r == '\'':
+	case isStatementSep(r):
 		l.unread()
 		tok, err := l.valueToken(TOctal, parseBaseInt(8))
 		return tok, l.lexStatement, err
@@ -483,8 +492,7 @@ func (l *Lexer) lexOctalNumber(r rune) (Token, consumerFunc, error) {
 
 func (l *Lexer) lexHexnum(r rune) (Token, consumerFunc, error) {
 	switch {
-	case unicode.IsSpace(r),
-		r == ';' || r == '{' || r == '\'':
+	case isStatementSep(r):
 		l.unread()
 		tok, err := l.valueToken(THex, parseBaseInt(16))
 		return tok, l.lexStatement, err
@@ -497,8 +505,7 @@ func (l *Lexer) lexHexnum(r rune) (Token, consumerFunc, error) {
 
 func (l *Lexer) lexBinnum(r rune) (Token, consumerFunc, error) {
 	switch {
-	case unicode.IsSpace(r),
-		r == ';' || r == '{' || r == '\'':
+	case isStatementSep(r):
 		l.unread()
 		tok, err := l.valueToken(TBinary, parseBaseInt(2))
 		return tok, l.lexStatement, err
@@ -543,10 +550,95 @@ func (l *Lexer) lexRationalDenomTail(r rune) (Token, consumerFunc, error) {
 	return tok, l.lexStatement, err
 }
 
+func parseBigFloat(prec uint) convertFunc {
+	if prec == 0 {
+		prec = DefaultPrecision
+	}
+
+	return func(tok Token) (Token, error) {
+		var f big.Float
+		f.SetPrec(prec)
+		text := tok.Value.(string)
+		if _, ok := f.SetString(text); !ok {
+			return tok, fmt.Errorf("malformed decimal %q", text)
+		}
+		tok.Value = &f
+		return tok, nil
+	}
+}
+
+func (l *Lexer) lexDecimalExponentUnsigned(r rune) (Token, consumerFunc, error) {
+	switch {
+	case r == eof:
+		return noToken, l.lexDecimalExponentUnsigned, ErrUnexpectedEOF
+	case r == '0': // End of float
+		l.buffer(r, r)
+		return noToken, l.lexDecimalEnd, nil
+	case isSign(r) || isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexDecimalExponentSignedInitial, nil
+	}
+	return noToken, nil, fmt.Errorf("unexpected character %q: exponents unimplemented", r)
+}
+
+func (l *Lexer) lexDecimalExponentSignedTail(r rune) (Token, consumerFunc, error) {
+	switch {
+	case r == eof:
+		return noToken, l.lexDecimalExponentSignedTail, ErrUnexpectedEOF
+	case isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexDecimalExponentSignedTail, nil
+	case isStatementSep(r):
+		l.unread()
+		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
+		return tok, l.lexStatement, err
+	}
+	return noToken, nil, fmt.Errorf("unexpected character %q: exponents unimplemented", r)
+}
+
+func (l *Lexer) lexDecimalExponentSignedInitial(r rune) (Token, consumerFunc, error) {
+	if r == '0' {
+		l.buffer(r, r)
+		return noToken, l.lexDecimalEnd, nil
+	} else if r == eof {
+		return noToken, l.lexDecimalExponentSignedInitial, ErrUnexpectedEOF
+	}
+	return l.lexDecimalExponentSignedTail(r)
+}
+
+func (l *Lexer) lexDecimalEnd(r rune) (Token, consumerFunc, error) {
+	if r == eof {
+		return noToken, l.lexDecimalEnd, ErrUnexpectedEOF
+	}
+	if !isStatementSep(r) {
+		return noToken, nil, fmt.Errorf("unexpected character %q: expected separator", r)
+	}
+	l.unread()
+	tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
+	return tok, l.lexStatement, err
+}
+
+func (l *Lexer) lexDecimalPoint(r rune) (Token, consumerFunc, error) {
+	switch {
+	case r == eof:
+		return noToken, l.lexDecimalPoint, ErrUnexpectedEOF
+	case isStatementSep(r):
+		l.unread()
+		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
+		return tok, l.lexStatement, err
+	case r == 'E' || r == 'e': // exponent
+		l.buffer(r, r)
+		return noToken, l.lexDecimalExponentUnsigned, nil
+	case !isDecimal(r):
+		return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
+	}
+	l.buffer(r, r)
+	return noToken, l.lexDecimalPoint, nil
+}
+
 func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	switch {
-	case unicode.IsSpace(r),
-		r == ';' || r == '{' || r == '\'' || r == '}' || r == ']':
+	case isStatementSep(r):
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
 		return tok, l.lexStatement, err
@@ -562,13 +654,19 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case r == 'x' || r == 'X':
 		l.buffer(r, -1)
 		return noToken, l.lexHexnum, nil
+	case r == '.':
+		l.buffer(r, r)
+		return noToken, l.lexDecimalPoint, nil
+	case r == 'E' || r == 'e':
+		l.buffer(r, r)
+		return noToken, l.lexDecimalExponentUnsigned, nil
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected b, x, X, octal, or separator", r)
 }
 
 func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	switch {
-	case unicode.IsSpace(r):
+	case isStatementSep(r):
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
 		return tok, l.lexStatement, err
@@ -597,10 +695,12 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	case '/':
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomInitial, nil
-	case ';', '{', '\'', '}', ']':
-		l.unread()
-		tok, err := l.valueToken(TInteger, parseBaseInt(10))
-		return tok, l.lexStatement, err
+	case '.':
+		l.buffer(r, r)
+		return noToken, l.lexDecimalPoint, nil
+	case 'E', 'e':
+		l.buffer(r, r)
+		return noToken, l.lexDecimalExponentUnsigned, nil
 	}
 
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected #, decimal, or separator", r)
@@ -867,5 +967,3 @@ func (l *Lexer) endEmbed(embed embedType) error {
 	l.embed = l.embed[:n]
 	return nil
 }
-
-// func (l *Lexer) lexExpr
