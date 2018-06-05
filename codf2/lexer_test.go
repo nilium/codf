@@ -72,8 +72,8 @@ func checkToken(t *testing.T, prefix string, got, want Token) {
 
 	if !compareValue(want.Value, got.Value) {
 		t.Errorf("%stok.Value = %T(%#v); want %T(%#v)", prefix,
-			want.Value, want.Value,
-			got.Value, got.Value)
+			got.Value, got.Value,
+			want.Value, want.Value)
 	}
 }
 
