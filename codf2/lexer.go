@@ -299,20 +299,22 @@ func (l *Lexer) scanPos() Location {
 // Rune cases
 
 func isBarewordInitial(r rune) bool {
-	switch r {
-	case '=', '<', '>', '.', '?', '/', '!', '@', '$', '%', '^', '&', '*', ':', '|', '_':
-		return true
-	}
-	return unicode.IsLetter(r)
+	return unicode.IsGraphic(r) &&
+		!isBarewordReserved(r) &&
+		!isBarewordForbidden(r)
+}
+
+func isBarewordForbidden(r rune) bool {
+	return r == '"' || isStatementSep(r)
+}
+
+func isBarewordReserved(r rune) bool {
+	return r == '#' || r == '-' || r == '+' || isDecimal(r)
 }
 
 func isBarewordTail(r rune) bool {
-	// This is the set of characters for BarewordInitial with numbers and '-+#'.
-	switch r {
-	case '=', '<', '>', '.', '?', '/', '!', '@', '$', '%', '^', '&', '*', ':', '|', '_', '#', '-', '+':
-		return true
-	}
-	return unicode.IsLetter(r) || unicode.IsNumber(r)
+	return unicode.IsGraphic(r) &&
+		!isBarewordForbidden(r)
 }
 
 func isStatementSep(r rune) bool {
