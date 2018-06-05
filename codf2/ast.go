@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,14 @@ type Document struct {
 	Children []Node
 }
 
+func (d *Document) String() string {
+	strs := make([]string, len(d.Children))
+	for i, n := range d.Children {
+		strs[i] = n.format("")
+	}
+	return strings.Join(strs, "\n")
+}
+
 func (d *Document) addChild(node Node) {
 	d.Children = append(d.Children, node)
 }
@@ -30,6 +39,7 @@ func (*Document) astparse() {}
 type Node interface {
 	Token() Token
 	astnode()
+	format(prefix string) string
 }
 
 type segmentNode interface {
@@ -48,6 +58,19 @@ type Statement struct {
 	Params  []ExprNode
 
 	EndTok Token
+}
+
+func (s *Statement) String() string {
+	return s.format("")
+}
+
+func (s *Statement) format(prefix string) string {
+	pieces := make([]string, len(s.Params)+1)
+	pieces[0] = s.Name()
+	for i, p := range s.Params {
+		pieces[i+1] = p.format("")
+	}
+	return prefix + strings.Join(pieces, " ") + ";"
 }
 
 func (*Statement) astparse() {}
@@ -87,6 +110,29 @@ type Section struct {
 	EndTok   Token
 }
 
+func (s *Section) String() string {
+	return s.format("")
+}
+
+func (s *Section) format(prefix string) string {
+	pieces := make([]string, len(s.Params)+2)
+	pieces[0] = s.Name()
+	for i, p := range s.Params {
+		pieces[i+1] = p.format("")
+	}
+	pieces[len(pieces)-1] = "{"
+	lead := prefix + strings.Join(pieces, " ")
+	if len(s.Children) == 0 {
+		return lead + "}"
+	}
+	inner := prefix + "\t"
+	for _, ch := range s.Children {
+		lead += "\n" + ch.format(inner)
+	}
+
+	return lead + "\n" + prefix + "}"
+}
+
 func (*Section) astparse() {}
 
 func (s *Section) addExpr(node ExprNode) error {
@@ -116,6 +162,23 @@ type Map struct {
 	Elems map[string]*MapEntry
 }
 
+func (m *Map) String() string {
+	return m.format("")
+}
+
+func (m *Map) format(prefix string) string {
+	pairs := m.Pairs()
+	if len(pairs) == 0 {
+		return "#{}"
+	}
+	pieces := make([]string, len(pairs))
+	indent := prefix + "\t"
+	for i, p := range pairs {
+		pieces[i] = indent + p.Key.format(indent) + " " + p.Val.format(indent)
+	}
+	return "#{\n" + strings.Join(pieces, "\n") + "\n" + prefix + "}"
+}
+
 func (m *Map) astnode() {}
 
 func (m *Map) Token() Token {
@@ -142,6 +205,21 @@ type Array struct {
 	StartTok Token
 	EndTok   Token
 	Elems    []ExprNode
+}
+
+func (a *Array) String() string {
+	return a.format("")
+}
+
+func (a *Array) format(prefix string) string {
+	if len(a.Elems) == 0 {
+		return "[]"
+	}
+	pieces := make([]string, len(a.Elems))
+	for i, p := range a.Elems {
+		pieces[i] = p.format("")
+	}
+	return "[" + strings.Join(pieces, " ") + "]"
 }
 
 func (*Array) astparse() {}
@@ -183,6 +261,10 @@ func (m *MapEntry) Value() interface{} {
 
 type Literal struct {
 	Tok Token
+}
+
+func (l *Literal) format(prefix string) string {
+	return string(l.Token().Raw)
 }
 
 func (l *Literal) astnode() {}
