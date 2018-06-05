@@ -75,6 +75,10 @@ func checkToken(t *testing.T, prefix string, got, want Token) {
 			got.Value, got.Value,
 			want.Value, want.Value)
 	}
+
+	if t.Failed() {
+		t.Logf("%stok.Raw = %q", prefix, got.Raw)
+	}
 }
 
 type tokenCase struct {
@@ -107,12 +111,12 @@ func (seq tokenSeq) Run(t *testing.T, input string) {
 
 		tok, err := lex.ReadToken()
 		if want.Err && err == nil {
-			t.Fatalf("%sgot error = nil; want error", prefix)
+			t.Errorf("%sgot error = nil; want error", prefix)
 		} else if !want.Err && err != nil {
-			t.Fatalf("%sgot error = %v; want %v", prefix, err, want.Kind)
+			t.Errorf("%sgot error = %v; want %v", prefix, err, want.Kind)
 		}
 
-		if want.Err {
+		if want.Err && err != nil {
 			return
 		}
 
