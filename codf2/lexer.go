@@ -275,22 +275,6 @@ func (l *Lexer) unread() {
 	l.pending = true
 }
 
-// func (l *Lexer) take(conds ...func(rune) bool) (match int, r rune, err error) {
-// 	r, err = l.peek()
-// 	if err == io.EOF {
-// 		r, err = eof, nil
-// 	} else if err != nil {
-// 		return -1, r, err
-// 	}
-// 	for i, cond := range conds {
-// 		if cond(r) {
-// 			r, err = l.readRune()
-// 			return i, r, err
-// 		}
-// 	}
-// 	return -1, 0, nil
-// }
-
 func (l *Lexer) reset() {
 	l.buf.Reset()
 	l.strbuf.Reset()
