@@ -598,7 +598,7 @@ func (l *Lexer) lexDecimalExponentUnsigned(r rune) (Token, consumerFunc, error) 
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentSignedInitial, nil
 	}
-	return noToken, nil, fmt.Errorf("unexpected character %q: exponents unimplemented", r)
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected sign or digit", r)
 }
 
 func (l *Lexer) lexDecimalExponentSignedTail(r rune) (Token, consumerFunc, error) {
@@ -613,7 +613,7 @@ func (l *Lexer) lexDecimalExponentSignedTail(r rune) (Token, consumerFunc, error
 		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
 		return tok, l.lexStatement, err
 	}
-	return noToken, nil, fmt.Errorf("unexpected character %q: exponents unimplemented", r)
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or separator", r)
 }
 
 func (l *Lexer) lexDecimalExponentSignedInitial(r rune) (Token, consumerFunc, error) {
