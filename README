@@ -53,7 +53,7 @@ nearest line ending (CRLF, LF, or CR):
     ' This is a comment
 
 Supported value types are integers, floats, rationals, durations,
-strings, symbols, booleans, regular expressions, arrays, and maps.
+strings, booleans, regular expressions, arrays, and maps.
 
 Integers
 --------
@@ -109,45 +109,34 @@ for microseconds.
 Strings
 -------
 
-Strings are surrounded by double quotes and currently follow Go quoting
-rules:
+Strings take two forms: double-quoted sequences of characters and
+barewords.
+
+Double-quoted strings are surrounded by double quotes ("...") and permit
+all Go string escape codes (such as \n or \Uhhhhhhhh). In addition, in
+contrast to Go, newlines in double-quoted strings are permitted without
+escaping them.
 
     simple-string "foobar";
     escapes       "foo\nbar"; ' "foo\nbar"
-
-    ' Embedded newlines are invalid while parsing but allowed by the
-    ' grammar -- this is a bug and newlines will be supported.
     newline       "foo
-                   bar";
+    bar";                     ' "foo\nbar"
 
-Symbols
--------
+Barewords, on the other hand, are unquoted strings. A bareword is any
+text that begins with a Unicode graphical character minus
+syntactically-important characters: decimal numbers, quotes, semicolons,
+braces, pound, and plus/minus. The rest of a bareword may contain
+decimal numbers, pound, and plus/minus -- semicolons, braces, and quotes
+are still reserved.
 
-Symbols have two forms: barewords and pound quotes. Bareword form is
-implied by the use of any text as a value in a statement or section
-following the name. Pound quotes are strings prefixed with a pound (#),
-per the example:
+    leading-dot .dot;           ' ".dot"
+    symbols     $^--;           ' "$^--"
+    slashes     /foo/bar;       ' "/foo/bar"
+    unicode     こんにちは世界; ' "こんにちは世界"
+    commas      Hello, World;   ' "Hello," "World" -- two strings
 
-    bareword     bareword;    ' #"bareword"
-    pound-quote  #"bareword"; ' #"bareword"
-    empty-symbol #"";         ' #""
-
-It is only possible to write an empty symbol or a symbol with spaces
-using the pound quote form.
-
-Barewords are the same form used by section and statement names.
-
-Barewords are comprised of an initial character, made up of a more
-constrained set of characters than the rest of the bareword (its tail).
-The grammar describes it as such (double brackets for a character class
-are case-insensitive):
-
-    BarewordInitial <- [[.?/!@$%^&*|_A-Z]]
-    BarewordTail    <- [[-+=<>.?/!@$%^&*#|:_A-Z0-9]]
-
-Eventually, most Unicode graphical characters will be accepted in the
-initial and tail sets. Currently, they aren't due to a limitation of the
-peg tool.
+It is not possibl to write a bareword that uses a boolean keyword
+(described below).
 
 Booleans
 --------
@@ -199,11 +188,11 @@ braces, prefixed by a pound. Key-value pairs in a map are written as
     empty-map #{};
     normal-map #{
         ' Key    Value
-        foo      1234      ' #"foo" => 1234
+        foo      1234      ' "foo" => 1234
         "bar"    #/baz/    ' "bar"  => #/baz/
     };
 
-Map keys must be either strings or symbols. Maps are unordered.
+Map keys must be either strings. Maps are unordered.
 
 
 ---
