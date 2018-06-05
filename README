@@ -144,7 +144,7 @@ Booleans
 Booleans can be represented using the following values:
 
             | True  | False |
-    --------|-------+-------|
+    --------+-------+-------+
     Keyword | true  | false |
             | yes   | no    |
 
