@@ -192,7 +192,8 @@ braces, prefixed by a pound. Key-value pairs in a map are written as
         "bar"    #/baz/    ' "bar"  => #/baz/
     };
 
-Map keys must be either strings. Maps are unordered.
+Map keys must be strings. If a key occurs more than once in a map, only
+the last value is kept.
 
 
 ---
