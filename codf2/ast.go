@@ -3,6 +3,7 @@ package codf
 import (
 	"math/big"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -33,7 +34,7 @@ type Node interface {
 
 type segmentNode interface {
 	parseNode
-	addExpr(ExprNode)
+	addExpr(ExprNode) error
 }
 
 type ExprNode interface {
@@ -51,8 +52,9 @@ type Statement struct {
 
 func (*Statement) astparse() {}
 
-func (s *Statement) addExpr(node ExprNode) {
+func (s *Statement) addExpr(node ExprNode) error {
 	s.Params = append(s.Params, node)
+	return nil
 }
 
 func (s *Statement) Name() string {
@@ -87,8 +89,9 @@ type Section struct {
 
 func (*Section) astparse() {}
 
-func (s *Section) addExpr(node ExprNode) {
+func (s *Section) addExpr(node ExprNode) error {
 	s.Params = append(s.Params, node)
+	return nil
 }
 
 func (s *Section) Name() string {
@@ -109,7 +112,8 @@ func (s *Section) addChild(node Node) {
 type Map struct {
 	StartTok Token
 	EndTok   Token
-	Elems    map[string]ExprNode
+	// Elems is a map of the string keys to their key-value pairs.
+	Elems map[string]*MapEntry
 }
 
 func (m *Map) astnode() {}
@@ -122,6 +126,18 @@ func (m *Map) Value() interface{} {
 	return m.Elems
 }
 
+func (m *Map) Pairs() []*MapEntry {
+	entries := make([]*MapEntry, 0, len(m.Elems))
+	for _, p := range m.Elems {
+		entries = append(entries, p)
+	}
+	sortfn := func(i, j int) bool {
+		return entries[i].Ord < entries[j].Ord
+	}
+	sort.Slice(entries, sortfn)
+	return entries
+}
+
 type Array struct {
 	StartTok Token
 	EndTok   Token
@@ -130,8 +146,9 @@ type Array struct {
 
 func (*Array) astparse() {}
 
-func (a *Array) addExpr(node ExprNode) {
+func (a *Array) addExpr(node ExprNode) error {
 	a.Elems = append(a.Elems, node)
+	return nil
 }
 
 func (a *Array) astnode() {}
@@ -142,6 +159,26 @@ func (a *Array) Token() Token {
 
 func (a *Array) Value() interface{} {
 	return a.Elems
+}
+
+type MapEntry struct {
+	// Ord is an integer for ordering entries in the map.
+	// There can be gaps in Ord for a range. Duplicate keys
+	// increase Ord and replace the conflicting MapEntry.
+	Ord uint
+	// Key and Val are the key-value pair.
+	Key ExprNode
+	Val ExprNode
+}
+
+func (m *MapEntry) astnode() {}
+
+func (m *MapEntry) Token() Token {
+	return m.Key.Token()
+}
+
+func (m *MapEntry) Value() interface{} {
+	return m.Val.Value()
 }
 
 type Literal struct {

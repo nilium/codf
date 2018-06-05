@@ -104,7 +104,17 @@ func (p *Parser) closeError(tok Token) error {
 	case *Array:
 		return unexpected(tok, "expected end of array beginning at %v",
 			ctx.Token().Start)
+	case *mapBuilder:
+		if ctx.k != nil {
+			return unexpected(tok, "expected value for key %q at %v",
+				ctx.m.Token().Value, ctx.m.Token().Start)
+		}
+		return unexpected(tok, "expected end of map beginning at %v",
+			ctx.m.Token().Start)
 	case *Document:
+		if tok.Kind != TEOF {
+			return unexpected(tok, "expected statement, section, or EOF")
+		}
 		return nil
 	}
 	panic("unreachable")
@@ -170,7 +180,25 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 		if ary, ok := p.context().(*Array); ok {
 			p.popContext()
 			ary.EndTok = tok
-			p.context().(segmentNode).addExpr(ary)
+			if err := p.context().(segmentNode).addExpr(ary); err != nil {
+				return nil, err
+			}
+			return skipWhitespace(p.parseStatement, p.parseStatementSentinel, true), nil
+		}
+		return nil, p.closeError(tok)
+
+	case TCurlClose:
+		if mb, ok := p.context().(*mapBuilder); ok {
+			if mb.k != nil {
+				return nil, unexpected(tok, "expected value for key %q at %v",
+					mb.k.Token().Value, mb.k.Token().Start)
+			}
+			p.popContext()
+			m := mb.m
+			m.EndTok = tok
+			if err := p.context().(segmentNode).addExpr(m); err != nil {
+				return nil, err
+			}
 			return skipWhitespace(p.parseStatement, p.parseStatementSentinel, true), nil
 		}
 		return nil, p.closeError(tok)
@@ -196,12 +224,19 @@ func (p *Parser) beginArray(tok Token) (tokenConsumer, error) {
 	return skipWhitespace(p.parseStatement, nil, false), nil
 }
 
+func (p *Parser) beginMap(tok Token) (tokenConsumer, error) {
+	m := newMapBuilder()
+	m.m.StartTok = tok
+	p.pushContext(m)
+	return skipWhitespace(p.parseStatement, nil, false), nil
+}
+
 func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 	switch tok.Kind {
 	case TBracketOpen:
 		return p.beginArray(tok)
 	case TMapOpen:
-		return nil, unexpected(tok, "maps unimplemented")
+		return p.beginMap(tok)
 	case TInteger,
 		TBaseInt,
 		TBinary,
@@ -214,7 +249,9 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 		TWord,
 		TBoolean,
 		TRegexp:
-		p.context().(segmentNode).addExpr(&Literal{tok})
+		if err := p.context().(segmentNode).addExpr(&Literal{tok}); err != nil {
+			return nil, err
+		}
 		return skipWhitespace(
 			p.parseStatement,
 			p.parseStatementSentinel,
@@ -239,4 +276,54 @@ func unexpected(tok Token, msg string, args ...interface{}) *ExpectedError {
 
 func (e *ExpectedError) Error() string {
 	return "[" + e.Tok.Start.String() + "] unexpected " + e.Tok.Kind.String() + ": " + e.Msg
+}
+
+type mapBuilder struct {
+	ord uint
+	m   *Map
+	k   ExprNode
+}
+
+func newMapBuilder() *mapBuilder {
+	return &mapBuilder{
+		m: &Map{
+			Elems: map[string]*MapEntry{},
+		},
+	}
+}
+
+var _ segmentNode = (*mapBuilder)(nil)
+
+func (*mapBuilder) astparse() {}
+
+func (m *mapBuilder) addExpr(expr ExprNode) error {
+	if m.k == nil {
+		switch expr.Token().Kind {
+		case TWord, TString:
+			m.k = expr
+			return nil
+		}
+		return unexpected(expr.Token(), "bad key; expected word or string")
+	}
+
+	ks, ok := String(m.k)
+	if !ok {
+		return fmt.Errorf("key token %q at %v invalid: value must be a string",
+			m.k.Token().Raw, m.k.Token().Start)
+	}
+
+	entry, ok := m.m.Elems[ks]
+	if entry == nil {
+		entry = &MapEntry{}
+		m.m.Elems[ks] = entry
+	}
+	*entry = MapEntry{
+		Ord: m.ord,
+		Key: m.k,
+		Val: expr,
+	}
+	m.k = nil
+	m.ord++
+
+	return nil
 }
