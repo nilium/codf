@@ -154,9 +154,6 @@ type Lexer struct {
 	next consumerFunc
 	err  error
 
-	// embed  []embedType
-	// _embed [8]embedType
-
 	buf    bytes.Buffer
 	strbuf bytes.Buffer
 }
@@ -166,7 +163,6 @@ func NewLexer(r io.RuneScanner) *Lexer {
 		scanner: r,
 		pos:     Location{Line: 1, Column: 1},
 	}
-	// le.embed = le._embed[:0]
 	return le
 }
 
