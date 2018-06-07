@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+func TestInvalidTokenName(t *testing.T) {
+	const want = "invalid"
+	const tok32 = TokenKind(0xffffffff)
+	if got := tok32.String(); got != want {
+		t.Errorf("Token(%08x) = %q; want %q", tok32, got, want)
+	}
+}
+
 func compareValue(l, r interface{}) bool {
 	switch ll := l.(type) {
 	case nil:
@@ -185,11 +193,12 @@ func TestWhitespace(t *testing.T) {
 }
 
 func TestBooleans(t *testing.T) {
+	// Booleans are lexed as words and converted to boolean tokens by the parser.
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("TRUE"), Value: "TRUE"}},
-		_ws, {Token: Token{Kind: TBoolean, Raw: []byte("true"), Value: true}},
-		_ws, {Token: Token{Kind: TBoolean, Raw: []byte("Yes"), Value: true}},
-		_ws, {Token: Token{Kind: TBoolean, Raw: []byte("FALSE"), Value: false}},
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("true"), Value: "true"}},
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("Yes"), Value: "Yes"}},
+		_ws, {Token: Token{Kind: TWord, Raw: []byte("FALSE"), Value: "FALSE"}},
 		_curlopen,
 		_curlclose,
 		_eof,
@@ -227,22 +236,15 @@ func TestStatement(t *testing.T) {
 		`)
 }
 
-func TestSectionDoubleClose(t *testing.T) {
+func TestStatementInvalid(t *testing.T) {
 	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("foo"), Value: "foo"}},
-		_ws, _bracketopen, _bracketopen,
-		{Token: Token{Kind: TInteger, Raw: []byte("1"), Value: big.NewInt(1)}},
-		_ws, {Token: Token{Kind: TInteger, Raw: []byte("2"), Value: big.NewInt(2)}},
-		_bracketclose,
-		_ws, {Token: Token{Kind: TInteger, Raw: []byte("3"), Value: big.NewInt(3)}},
-		_bracketclose,
-		_ws, _mapopen, _curlclose,
-		_ws, _curlopen,
-		_ws, _semicolon,
-		_ws, _curlclose,
-		_ws, _error,
-	}.Run(t, "stmt foo [[1 2] 3] #{} { ; } }")
+		{Token: Token{Kind: TWord, Raw: []byte("a"), Value: "a"}},
+		_eof,
+	}.Run(t, `a`)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("a"), Value: "a"}},
+		_error,
+	}.Run(t, "a\x00")
 }
 
 func TestRegexp(t *testing.T) {
@@ -274,13 +276,6 @@ func TestRegexp(t *testing.T) {
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
 		_ws, _error,
 	}.Run(t, "stmt #/foobar")
-
-	// EOF in statement
-	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#/foobar/"), Value: regex("foobar")}},
-		_error,
-	}.Run(t, "stmt #/foobar/")
 }
 
 func TestString(t *testing.T) {
@@ -290,6 +285,7 @@ func TestString(t *testing.T) {
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`"simple string"`), Value: "simple string"}},
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\a\b\f\n\r\t\v\\\""`), Value: "\a\b\f\n\r\t\v\\\""}},
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\123\xff\u7fff\U00001234"`), Value: "\123\xff\u7fff\U00001234"}},
+		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\xFF"`), Value: "\xff"}},
 		_ws, _semicolon,
 		_eof,
 	}.Run(t,
@@ -297,6 +293,7 @@ func TestString(t *testing.T) {
 			"simple string"
 			"\a\b\f\n\r\t\v\\\""
 			"\123\xff\u7fff\U00001234"
+			"\xFF"
 		;`)
 }
 
@@ -358,7 +355,6 @@ func TestInvalidStrings(t *testing.T) {
 
 	cases := []tokenSeqTest{
 		{Name: "EOF", Input: `stmt "`},
-		{Name: "BadContext", Input: ` ""`, Seq: tokenSeq{_ws, _error}},
 		{Name: "Octal-Invalid", Input: `stmt "\60z";`},
 		{Name: "Octal-Invalid", Input: `stmt "\608";`},
 		{Name: "Octal-EOF", Input: `stmt "\`},
@@ -389,8 +385,9 @@ func TestInvalidStrings(t *testing.T) {
 func TestIntegers(t *testing.T) {
 	neg := big.NewInt(-1234)
 	pos := big.NewInt(1234)
+	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
 	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
+		_stmt,
 		// Negative sign
 		_ws, {Token: Token{Kind: TBinary, Value: neg, Raw: []byte("-0b10011010010")}},
 		_ws, {Token: Token{Kind: TBinary, Value: neg, Raw: []byte("-0B10011010010")}},
@@ -464,6 +461,25 @@ func TestIntegers(t *testing.T) {
 			 16#4D2
 			 36#ya
 		;`)
+
+	// Check invalid cases
+	bad := tokenSeq{_error}
+	badValues := []string{
+		`4#`, `4#;`,
+		`4x`, `4x;`,
+		`4X`, `4X;`,
+		`4b`, `4b;`,
+		`4B`, `4B;`,
+		`06z`,
+		`0xfg`,
+		`4#15`,
+		`0b12`,
+		`-`,
+		`+`,
+	}
+	for _, c := range badValues {
+		t.Run(c, func(t *testing.T) { bad.Run(t, c) })
+	}
 }
 
 func TestRationals(t *testing.T) {
@@ -508,21 +524,10 @@ func TestRationals(t *testing.T) {
 		;`)
 
 	// Zero denominator -> error
-	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, _error,
-	}.Run(t, `stmt 5/0;`)
+	tokenSeq{_error}.Run(t, `5/0`)
 
 	// Fail on EOF in rational (needs a sentinel)
-	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, _error,
-	}.Run(t, `stmt 5/`)
-
-	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, _error,
-	}.Run(t, `stmt 5/1`)
+	tokenSeq{_error}.Run(t, `5/`)
 }
 
 func TestLocationString(t *testing.T) {
@@ -597,14 +602,8 @@ func TestDecimals(t *testing.T) {
 			1.2345 12345e-4 1.2345e4 1.2345e+4
 		;`)
 
-	// Check invalid cases...
-
-	// ... with no leading word
-	tokenSeq{_error}.Run(t, `5.5;`)
-	tokenSeq{_error}.Run(t, `5e5;`)
-
-	// ... after a leading word
-	bad := tokenSeq{_stmt, _ws, _error}
+	// Check invalid cases
+	bad := tokenSeq{_error}
 	badValues := []string{
 		`5z`,    // invalid char
 		`5ez`,   // invalid char
@@ -619,16 +618,9 @@ func TestDecimals(t *testing.T) {
 		`0.5e`,  // eof
 		`0.5e+`, // eof
 		`0.5e-`, // eof
-		`0.5e0`, // eof
-		`0.5e9`, // eof
-		`0`,     // eof
-		`5e9`,   // eof
-		`0e9`,   // eof
-		`5e+9`,  // eof
-		`0e+9`,  // eof
 	}
 	for _, c := range badValues {
-		bad.Run(t, "stmt "+c)
+		t.Run(c, func(t *testing.T) { bad.Run(t, c) })
 	}
 }
 
@@ -713,16 +705,9 @@ func TestDurations(t *testing.T) {
 		;`)
 	})
 
-	// Check invalid cases...
-
-	// ... with no leading word
-	tokenSeq{_error}.Run(t, `5ms;`)
-	tokenSeq{_error}.Run(t, `5h;`)
-
-	// ... after a leading word
-	bad := tokenSeq{_stmt, _ws, _error}
+	// Check invalid cases
+	bad := tokenSeq{_error}
 	badValues := []string{
-		`1m`,
 		`1mz`,
 		`1h0`,
 		`1h00`,
@@ -743,7 +728,7 @@ func TestDurations(t *testing.T) {
 	}
 	for _, c := range badValues {
 		t.Run(c, func(t *testing.T) {
-			bad.Run(t, "stmt "+c)
+			bad.Run(t, c)
 		})
 	}
 }
