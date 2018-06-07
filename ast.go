@@ -68,7 +68,7 @@ func (s *Statement) format(prefix string) string {
 	pieces := make([]string, len(s.Params)+1)
 	pieces[0] = s.Name()
 	for i, p := range s.Params {
-		pieces[i+1] = p.format("")
+		pieces[i+1] = p.format(prefix)
 	}
 	return prefix + strings.Join(pieces, " ") + ";"
 }
@@ -216,8 +216,9 @@ func (a *Array) format(prefix string) string {
 		return "[]"
 	}
 	pieces := make([]string, len(a.Elems))
+	indent := prefix + "\t"
 	for i, p := range a.Elems {
-		pieces[i] = p.format("")
+		pieces[i] = p.format(indent)
 	}
 	return "[" + strings.Join(pieces, " ") + "]"
 }
