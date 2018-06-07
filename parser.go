@@ -14,7 +14,6 @@ type Parser struct {
 	doc  *Document
 	next tokenConsumer
 
-	pending   bool
 	lastToken Token
 	lastErr   error
 
@@ -38,20 +37,9 @@ func NewParser() *Parser {
 }
 
 func (p *Parser) nextToken(tr TokenReader) (tok Token, err error) {
-	if p.pending {
-		p.pending = false
-		return p.lastToken, p.lastErr
-	}
 	tok, err = tr.ReadToken()
 	p.lastToken, p.lastErr = tok, err
 	return tok, err
-}
-
-func (p *Parser) unread() {
-	if p.pending {
-		panic("double-unread")
-	}
-	p.pending = true
 }
 
 func (p *Parser) Parse(tr TokenReader) error {
