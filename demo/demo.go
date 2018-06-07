@@ -1,20 +1,25 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/kr/pretty"
 	"go.spiff.io/codf"
 )
 
 func main() {
+	log.SetFlags(log.Lshortfile)
 	if len(os.Args) == 1 {
 		load("stdin", os.Stdin)
 	}
 
+	for _, p := range os.Args[1:] {
+		loadFile(p)
+	}
 }
 
 func loadFile(path string) {
@@ -27,23 +32,17 @@ func loadFile(path string) {
 }
 
 func load(name string, file *os.File) {
-	buffer, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Fatal(err)
-	}
+	buf := bufio.NewReader(file)
+	lexer := codf.NewLexer(buf)
 
-	p := &codf.Parser{Buffer: string(buffer), Pretty: true}
-	p.Init()
-
-	if err := p.Parse(); err != nil {
+	p := codf.NewParser()
+	if err := p.Parse(lexer); err != nil {
 		log.Print(err)
-		return
 	}
-
-	p.PrintSyntaxTree()
-	if err := p.Run(); err != nil {
-		log.Fatal("parse error: ", err)
-	}
-
-	fmt.Println(p.Root())
+	fmt.Fprintf(os.Stderr, "%# v\n------------------------------------------------------------------------\n",
+		pretty.Formatter(p.Document()))
+	os.Stderr.Sync()
+	fmt.Printf("%s\n",
+		p.Document())
+	os.Stdout.Sync()
 }
