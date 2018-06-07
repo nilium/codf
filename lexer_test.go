@@ -155,7 +155,7 @@ func TestComment(t *testing.T) {
 		{Token: Token{Kind: TComment, Raw: []byte("")}},
 		{Token: Token{Kind: TComment, Raw: []byte(" foo bar baz")}},
 		_eof,
-	}.Run(t, "'\n' foo bar baz")
+	}.Run(t, "--\n-- foo bar baz")
 }
 
 func TestBareword(t *testing.T) {
@@ -174,10 +174,12 @@ func TestBareword(t *testing.T) {
 		}},
 		_semicolon,
 		{Token: Token{Kind: TWhitespace}},
+		{Token: Token{Kind: TWord, Raw: []byte("foo--foo"), Value: "foo--foo"}},
+		_ws,
 		{Token: Token{Kind: TComment, Raw: []byte(" foo")}},
 		{Token: Token{Kind: TWhitespace}},
 		_eof,
-	}.Run(t, "\t.foo$bar#baz=quux; ' foo\n\n")
+	}.Run(t, "\t.foo$bar#baz=quux; foo--foo -- foo\n\n")
 }
 
 func TestWhitespace(t *testing.T) {
@@ -222,7 +224,7 @@ func TestStatement(t *testing.T) {
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("b"), Value: "b"}},
 		_curlopen, _curlclose,
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("c"), Value: "c"}},
-		_comment,
+		_ws, _comment,
 		_ws, _semicolon, _semicolon,
 		_ws, _eof,
 	}.Run(t, `
@@ -231,7 +233,7 @@ func TestStatement(t *testing.T) {
 		sect{}
 		a;
 		b{}
-		c'foo
+		c --foo
 		;;
 		`)
 }

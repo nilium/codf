@@ -296,8 +296,7 @@ func isStatementSep(r rune) bool {
 		r == '{' ||
 		r == '}' ||
 		r == '[' ||
-		r == ']' ||
-		r == '\''
+		r == ']'
 }
 
 func isLongIntervalInitial(r rune) bool {
@@ -412,7 +411,10 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexWordTail(l.lexSegmentTail), nil
 
 	// Numerics (integer, decimal, rational, duration)
-	case isSign(r):
+	case r == '-':
+		l.buffer(r, r)
+		return noToken, l.lexCommentOrSign, nil
+	case r == '+':
 		l.buffer(r, r)
 		return noToken, l.lexSignedNumber, nil
 	case r == '0':
@@ -454,6 +456,14 @@ func (l *Lexer) lexSegmentTail(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexSegment, nil
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected a name character", r)
+}
+
+func (l *Lexer) lexCommentOrSign(r rune) (Token, consumerFunc, error) {
+	if r == '-' {
+		l.reset()
+		return noToken, l.lexComment(l.lexSegment), nil
+	}
+	return l.lexSignedNumber(r)
 }
 
 func (l *Lexer) lexSignedNumber(r rune) (Token, consumerFunc, error) {
