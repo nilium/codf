@@ -25,7 +25,6 @@ func mustParse(t *testing.T, in string) *Document {
 	if err != nil {
 		t.Fatalf("Parse(..) error = %v; want nil", err)
 	}
-	t.Logf("Parse(..) error = %v", err)
 	return doc
 }
 
@@ -34,6 +33,7 @@ func mustNotParse(t *testing.T, in string) *Document {
 	if err == nil {
 		t.Fatalf("Parse(..) error = %v; want error", err)
 	}
+	t.Logf("Parse(..) error = %v", err)
 	return doc
 }
 
