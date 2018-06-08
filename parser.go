@@ -17,6 +17,10 @@ type Parser struct {
 	lastToken Token
 	lastErr   error
 
+	// parseErr is the last error returned by Parse() -- if any error occurs during Parse,
+	// subsequent calls to Parse will return this.
+	parseErr error
+
 	ctx  []parseNode
 	_ctx [6]parseNode
 }
@@ -42,13 +46,24 @@ func (p *Parser) nextToken(tr TokenReader) (tok Token, err error) {
 	return tok, err
 }
 
-func (p *Parser) Parse(tr TokenReader) error {
+func (p *Parser) Parse(tr TokenReader) (err error) {
+	if p.parseErr != nil {
+		return p.parseErr
+	}
+
+	defer func() {
+		if err != nil {
+			p.parseErr = err
+		}
+	}()
+
 	if p.next == nil {
 		p.next = p.beginSegment
 	}
 
+	var tok Token
 	for p.next != nil {
-		tok, err := p.nextToken(tr)
+		tok, err = p.nextToken(tr)
 		if err != nil {
 			return err
 		}
