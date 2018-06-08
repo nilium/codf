@@ -1,0 +1,7 @@
+language: go
+
+go_import_path: go.spiff.io/codf
+go:
+  - '1.9'
+  - '1.10'
+  - tip
