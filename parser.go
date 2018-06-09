@@ -139,7 +139,7 @@ func (p *Parser) closeError(tok Token) error {
 	case *mapBuilder:
 		if ctx.k != nil {
 			return unexpected(tok, "expected value for key %q at %v",
-				ctx.m.Token().Value, ctx.m.Token().Start)
+				ctx.k.Token().Value, ctx.k.Token().Start)
 		}
 		return unexpected(tok, "expected end of map beginning at %v",
 			ctx.m.Token().Start)
