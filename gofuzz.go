@@ -1,6 +1,6 @@
 // +build gofuzz
 
-package codf
+package codf // import "go.spiff.io/codf"
 
 import (
 	"bytes"

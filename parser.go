@@ -1,4 +1,4 @@
-package codf
+package codf // import "go.spiff.io/codf"
 
 import (
 	"fmt"
