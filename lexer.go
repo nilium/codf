@@ -456,8 +456,7 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 
 	// Word
 	case isBarewordInitial(r):
-		l.buffer(r, r)
-		return noToken, l.lexWordTail(l.lexSegmentTail), nil
+		return l.lexBecomeWord(r)
 
 	// Numerics (integer, decimal, rational, duration)
 	case isSign(r):
@@ -496,6 +495,13 @@ func (l *Lexer) lexWordTail(next consumerFunc) consumerFunc {
 	return wordConsumer
 }
 
+func (l *Lexer) lexBecomeWord(r rune) (Token, consumerFunc, error) {
+	if r > 0 {
+		l.buffer(r, r)
+	}
+	return noToken, l.lexWordTail(l.lexSegmentTail), nil
+}
+
 func (l *Lexer) lexSegmentTail(r rune) (Token, consumerFunc, error) {
 	l.unread()
 	switch {
@@ -508,14 +514,20 @@ func (l *Lexer) lexSegmentTail(r rune) (Token, consumerFunc, error) {
 }
 
 func (l *Lexer) lexSignedNumber(r rune) (Token, consumerFunc, error) {
-	if !isDecimal(r) {
-		return noToken, nil, fmt.Errorf("unexpected character %q: expected number after sign", r)
+	switch {
+	case isDecimal(r):
+		l.buffer(r, r)
+		if r == '0' {
+			return noToken, l.lexZero, nil
+		}
+		return noToken, l.lexNonZero, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	l.buffer(r, r)
-	if r == '0' {
-		return noToken, l.lexZero, nil
-	}
-	return noToken, l.lexNonZero, nil
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected number after sign", r)
 }
 
 func parseBaseInt(base int) convertFunc {
@@ -531,13 +543,15 @@ func parseBaseInt(base int) convertFunc {
 
 func (l *Lexer) lexOctalNumber(r rune) (Token, consumerFunc, error) {
 	switch {
-	case isStatementSep(r):
-		l.unread()
-		tok, err := l.valueToken(TOctal, parseBaseInt(8))
-		return tok, l.lexSegment, err
 	case isOctal(r):
 		l.buffer(r, r)
 		return noToken, l.lexOctalNumber, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		tok, err := l.valueToken(TOctal, parseBaseInt(8))
+		return tok, l.lexSegment, err
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected octal digit or separator", r)
 }
@@ -556,26 +570,30 @@ func (l *Lexer) lexNoTerminate(next consumerFunc, expect string) consumerFunc {
 
 func (l *Lexer) lexHexNum(r rune) (Token, consumerFunc, error) {
 	switch {
-	case isStatementSep(r), r == eof:
-		l.unread()
-		tok, err := l.valueToken(THex, parseBaseInt(16))
-		return tok, l.lexSegment, err
 	case isHex(r):
 		l.buffer(r, r)
 		return noToken, l.lexHexNum, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		tok, err := l.valueToken(THex, parseBaseInt(16))
+		return tok, l.lexSegment, err
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected hex digit or separator", r)
 }
 
 func (l *Lexer) lexBinNum(r rune) (Token, consumerFunc, error) {
 	switch {
-	case isStatementSep(r):
-		l.unread()
-		tok, err := l.valueToken(TBinary, parseBaseInt(2))
-		return tok, l.lexSegment, err
 	case isBinary(r):
 		l.buffer(r, r)
 		return noToken, l.lexBinNum, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		tok, err := l.valueToken(TBinary, parseBaseInt(2))
+		return tok, l.lexSegment, err
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected binary digit or separator", r)
 }
@@ -595,8 +613,11 @@ func (l *Lexer) lexRationalDenomInitial(r rune) (Token, consumerFunc, error) {
 	case r >= '1' && r <= '9':
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomTail, nil
-	case r == eof:
-		return noToken, l.lexRationalDenomInitial, ErrUnexpectedEOF
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected positive number", r)
 }
@@ -606,10 +627,14 @@ func (l *Lexer) lexRationalDenomTail(r rune) (Token, consumerFunc, error) {
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomTail, nil
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		tok, err := l.valueToken(TRational, parseRational)
+		return tok, l.lexSegment, err
 	}
-	l.unread()
-	tok, err := l.valueToken(TRational, parseRational)
-	return tok, l.lexSegment, err
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected rational number", r)
 }
 
 func parseBigFloat(prec uint) convertFunc {
@@ -631,14 +656,20 @@ func parseBigFloat(prec uint) convertFunc {
 
 func (l *Lexer) lexDecimalExponentUnsigned(r rune) (Token, consumerFunc, error) {
 	switch {
-	case r == eof:
-		return noToken, l.lexDecimalExponentUnsigned, ErrUnexpectedEOF
 	case r == '0': // End of float
 		l.buffer(r, r)
 		return noToken, l.lexDecimalEnd, nil
-	case isSign(r) || isDecimal(r):
+	case isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexDecimalExponentSignedTail, nil
+	case isSign(r):
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentSignedInitial, nil
+	case r == eof || isStatementSep(r):
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected sign or digit", r)
 }
@@ -648,10 +679,12 @@ func (l *Lexer) lexDecimalExponentSignedTail(r rune) (Token, consumerFunc, error
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentSignedTail, nil
-	case isStatementSep(r), r == eof:
+	case isStatementSep(r) || r == eof:
 		l.unread()
 		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
 		return tok, l.lexSegment, err
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or separator", r)
 }
@@ -660,46 +693,57 @@ func (l *Lexer) lexDecimalExponentSignedInitial(r rune) (Token, consumerFunc, er
 	if r == '0' {
 		l.buffer(r, r)
 		return noToken, l.lexDecimalEnd, nil
+	} else if isStatementSep(r) || r == eof {
+		l.unread()
+		return l.lexBecomeWord(-1)
 	}
 	return l.lexDecimalExponentSignedTail(r)
 }
 
 func (l *Lexer) lexDecimalEnd(r rune) (Token, consumerFunc, error) {
-	if !isStatementSep(r) {
-		return noToken, nil, fmt.Errorf("unexpected character %q: expected separator", r)
+	switch {
+	case r == eof || isStatementSep(r):
+		l.unread()
+		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
+		return tok, l.lexSegment, err
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	l.unread()
-	tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
-	return tok, l.lexSegment, err
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected separator", r)
 }
 
 func (l *Lexer) lexDecimalPointInitial(r rune) (Token, consumerFunc, error) {
 	// Must have at least one trailing number
 	switch {
-	case r == eof:
-		return noToken, l.lexDecimalPointInitial, ErrUnexpectedEOF
-	case !isDecimal(r):
-		return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
+	case isDecimal(r):
+		return l.lexDecimalPoint(r)
+	case r == eof || isStatementSep(r):
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	return l.lexDecimalPoint(r)
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
 }
 
 func (l *Lexer) lexDecimalPoint(r rune) (Token, consumerFunc, error) {
 	switch {
-	case isStatementSep(r):
-		l.unread()
-		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
-		return tok, l.lexSegment, err
 	case r == 'E' || r == 'e': // exponent
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentUnsigned, nil
 	case isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
-	case !isDecimal(r):
-		return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
+	case isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexDecimalPoint, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		tok, err := l.valueToken(TDecimal, parseBigFloat(l.Precision))
+		return tok, l.lexSegment, err
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	l.buffer(r, r)
-	return noToken, l.lexDecimalPoint, nil
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
 }
 
 func parseDuration(tok Token) (Token, error) {
@@ -719,62 +763,89 @@ func (l *Lexer) lexIntervalConsumer(r rune) (Token, consumerFunc, error) {
 	} else if isMaybeLongIntervalInitial(r) {
 		return noToken, l.lexIntervalUnitMaybeLong, nil
 	}
-	return noToken, l.lexInterval, nil
+	return noToken, l.lexIntervalInitial, nil
 }
 
 func (l *Lexer) lexIntervalUnitMaybeLong(r rune) (Token, consumerFunc, error) {
-	if isStatementSep(r) || r == eof {
-		return l.lexInterval(r)
-	} else if !(r == 's' || isDecimal(r)) {
-		return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or 's'", r)
+	switch {
+	case r == 's' || isDecimal(r):
+		l.buffer(r, r)
+		return noToken, l.lexIntervalInitial, nil
+	case isStatementSep(r) || r == eof:
+		return l.lexIntervalInitial(r)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	l.buffer(r, r)
-	return noToken, l.lexInterval, nil
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or 's'", r)
 }
 
 func (l *Lexer) lexIntervalUnitLong(r rune) (Token, consumerFunc, error) {
-	if r == eof {
-		return noToken, l.lexIntervalUnitLong, ErrUnexpectedEOF
-	} else if r != 's' {
-		return noToken, nil, fmt.Errorf("unexpected character %q: expected 's'", r)
+	switch {
+	case r == 's':
+		l.buffer(r, r)
+		return noToken, l.lexIntervalInitial, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	l.buffer(r, r)
-	return noToken, l.lexInterval, nil
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected 's'", r)
 }
 
 func (l *Lexer) lexIntervalDecimalInitial(r rune) (Token, consumerFunc, error) {
 	switch {
-	case r == eof:
-		return noToken, l.lexIntervalDecimalInitial, ErrUnexpectedEOF
 	case r == '0':
 		l.buffer(r, r)
 		return noToken, l.lexIntervalZero, nil
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexIntervalDecimalTail, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, l.lexIntervalDecimalInitial, fmt.Errorf("unexpected character %q: expected decimal number", r)
 }
 
 func (l *Lexer) lexIntervalDecimalTail(r rune) (Token, consumerFunc, error) {
-	if r == eof {
-		return noToken, l.lexIntervalDecimalTail, ErrUnexpectedEOF
-	} else if isIntervalInitial(r) {
+	switch {
+	case isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
-	} else if isDecimal(r) {
+	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexIntervalDecimalTail, nil
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, l.lexIntervalDecimalTail, fmt.Errorf("unexpected character %s: expected digit or interval unit", TDuration)
 }
 
 func (l *Lexer) lexIntervalZero(r rune) (Token, consumerFunc, error) {
-	if r == eof {
-		return noToken, l.lexIntervalZero, ErrUnexpectedEOF
-	} else if isIntervalInitial(r) {
+	switch {
+	case isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected interval unit", r)
+}
+
+func (l *Lexer) lexIntervalInitial(r rune) (Token, consumerFunc, error) {
+	if isStatementSep(r) || r == eof {
+		l.unread()
+		tok, err := l.valueToken(TDuration, parseDuration)
+		return tok, l.lexSegment, err
+	}
+	return l.lexInterval(r)
 }
 
 func (l *Lexer) lexInterval(r rune) (Token, consumerFunc, error) {
@@ -785,14 +856,15 @@ func (l *Lexer) lexInterval(r rune) (Token, consumerFunc, error) {
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexInterval, nil
-	case isStatementSep(r), r == eof:
-		l.unread()
-		tok, err := l.valueToken(TDuration, parseDuration)
-		return tok, l.lexSegment, err
 	case isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
+	case isStatementSep(r) || r == eof:
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
-	return noToken, l.lexInterval, fmt.Errorf("unexpected character %q: expected number or interval unit", r)
+	return noToken, nil, fmt.Errorf("unexpected character %q: expected number or interval unit", r)
 }
 
 func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
@@ -821,6 +893,8 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case r == 'E' || r == 'e':
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentUnsigned, nil
+	case isBarewordTail(r):
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected b, x, X, octal, duration unit, or separator", r)
 }
@@ -847,14 +921,13 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 		// Discard sign char in strbuf
 		// Parse base number
 		base, err := strconv.Atoi(strings.TrimLeft(str, "-+"))
-		if err != nil {
-			return noToken, nil, fmt.Errorf("malformed base number: %v", err)
-		} else if base < 2 || base > 36 {
-			return noToken, nil, fmt.Errorf("malformed base number %d: must be 2-36", base)
+		if err != nil || base < 2 || base > 36 {
+			l.buffer(-1, r)
+			return l.lexBecomeWord(-1)
 		}
 
 		l.strbuf.Reset()
-		return noToken, l.lexNoTerminate(l.lexBaseNumber(neg, base), fmt.Sprintf("base-%d digit", base)), nil
+		return noToken, l.lexBaseNumber(neg, base), nil
 	case '/':
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomInitial, nil
@@ -864,6 +937,10 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	case 'E', 'e':
 		l.buffer(r, r)
 		return noToken, l.lexDecimalExponentUnsigned, nil
+	}
+
+	if isBarewordTail(r) {
+		return l.lexBecomeWord(r)
 	}
 
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected #, decimal, or separator", r)
@@ -883,23 +960,28 @@ func isBaseDigit(base int, r rune) bool {
 func (l *Lexer) lexBaseNumber(neg bool, base int) (consumer consumerFunc) {
 	n := 0
 	consumer = func(r rune) (Token, consumerFunc, error) {
-		if !isBaseDigit(base, r) {
+		if isBaseDigit(base, r) {
+			n++
+			l.buffer(r, r)
+			return noToken, consumer, nil
+		} else if isBarewordTail(r) {
+			return l.lexBecomeWord(r)
+		} else if n == 0 && (isStatementSep(r) || r == eof) {
 			l.unread()
-			if n == 0 || (r != eof && !isStatementSep(r)) {
-				return noToken, nil, fmt.Errorf("unexpected character %q: expected base-%d digit", r, base)
-			}
-			tok, err := l.valueToken(TBaseInt, parseBaseInt(base))
-			if err == nil && neg {
-				i := tok.Value.(*big.Int)
-				i.Neg(i)
-			}
-			return tok, l.lexSegment, err
+			return l.lexBecomeWord(-1)
 		}
 
-		n++
-		l.buffer(r, r)
+		l.unread()
+		if !(isStatementSep(r) || r == eof) {
+			return noToken, nil, fmt.Errorf("unexpected character %q: expected base-%d digit", r, base)
+		}
 
-		return noToken, consumer, nil
+		tok, err := l.valueToken(TBaseInt, parseBaseInt(base))
+		if err == nil && neg {
+			i := tok.Value.(*big.Int)
+			i.Neg(i)
+		}
+		return tok, l.lexSegment, err
 	}
 	return consumer
 }
@@ -1042,13 +1124,20 @@ func (l *Lexer) lexHexStringEscape(numbytes int, write func(final uint32)) (cons
 }
 
 func (l *Lexer) lexSpecial(r rune) (Token, consumerFunc, error) {
-	switch r {
-	case '{':
+	switch {
+	case r == '{':
 		return l.token(TMapOpen, false), l.lexSegment, nil
-	case '/':
+	case r == '/':
 		l.buffer('#', -1)
 		l.buffer(r, -1)
 		return noToken, l.lexRegexp, nil
+	case isStatementSep(r) || r == eof:
+		l.buffer('#', '#')
+		l.unread()
+		return l.lexBecomeWord(-1)
+	case isBarewordTail(r):
+		l.buffer('#', '#')
+		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q after #: expected { or /", r)
 }

@@ -6,13 +6,19 @@ import (
 	"math/big"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
 
+// logf is a pointer to the current test's Logf function.
+// Only used for debugging.
+var logf = func(string, ...interface{}) {}
+
 func TestInvalidTokenName(t *testing.T) {
 	const want = "invalid"
 	const tok32 = TokenKind(0xffffffff)
+	defer setlogf(t)()
 	if got := tok32.String(); got != want {
 		t.Errorf("Token(%08x) = %q; want %q", tok32, got, want)
 	}
@@ -146,11 +152,13 @@ type tokenSeqTest struct {
 
 func (tt *tokenSeqTest) Run(t *testing.T) {
 	t.Run(tt.Name, func(t *testing.T) {
+		defer setlogf(t)()
 		tt.Seq.Run(t, tt.Input)
 	})
 }
 
 func TestComment(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{
 		{Token: Token{Kind: TComment, Raw: []byte("")}},
 		{Token: Token{Kind: TComment, Raw: []byte(" foo bar baz")}},
@@ -159,6 +167,7 @@ func TestComment(t *testing.T) {
 }
 
 func TestBareword(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{
 		{Token: Token{
 			Kind:  TWhitespace,
@@ -172,15 +181,40 @@ func TestBareword(t *testing.T) {
 			End:   Location{Offset: 18, Line: 1, Column: 19},
 			Value: ".foo$bar#baz=quux",
 		}},
+		_ws,
+		{Token: Token{
+			Kind:  TWord,
+			Raw:   []byte("10.0.0.0/8"),
+			Start: Location{Offset: 20, Line: 2, Column: 2},
+			End:   Location{Offset: 30, Line: 2, Column: 12},
+			Value: "10.0.0.0/8",
+		}},
+		_ws,
+		{Token: Token{
+			Kind:  TWord,
+			Raw:   []byte("#"),
+			Start: Location{Offset: 31, Line: 2, Column: 13},
+			End:   Location{Offset: 32, Line: 2, Column: 14},
+			Value: "#",
+		}},
+		_ws,
+		{Token: Token{
+			Kind:  TWord,
+			Raw:   []byte("#f"),
+			Start: Location{Offset: 33, Line: 2, Column: 15},
+			End:   Location{Offset: 35, Line: 2, Column: 17},
+			Value: "#f",
+		}},
 		_semicolon,
 		{Token: Token{Kind: TWhitespace}},
 		{Token: Token{Kind: TComment, Raw: []byte(" foo")}},
 		{Token: Token{Kind: TWhitespace}},
 		_eof,
-	}.Run(t, "\t.foo$bar#baz=quux; ' foo\n\n")
+	}.Run(t, "\t.foo$bar#baz=quux\n\t10.0.0.0/8 # #f; ' foo\n\n")
 }
 
 func TestWhitespace(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{
 		{
 			Token: Token{
@@ -193,6 +227,7 @@ func TestWhitespace(t *testing.T) {
 }
 
 func TestBooleans(t *testing.T) {
+	defer setlogf(t)()
 	// Booleans are lexed as words and converted to boolean tokens by the parser.
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("TRUE"), Value: "TRUE"}},
@@ -206,6 +241,7 @@ func TestBooleans(t *testing.T) {
 }
 
 func TestStatement(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
 		_ws, {Token: Token{Kind: TInteger, Raw: []byte("-1234"), Value: big.NewInt(-1234)}},
@@ -237,10 +273,12 @@ func TestStatement(t *testing.T) {
 }
 
 func TestInvalidUTF8(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{_error}.Run(t, "\xff")
 }
 
 func TestStatementInvalid(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("a"), Value: "a"}},
 		_eof,
@@ -252,6 +290,7 @@ func TestStatementInvalid(t *testing.T) {
 }
 
 func TestRegexp(t *testing.T) {
+	defer setlogf(t)()
 	regex := regexp.MustCompile
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
@@ -263,12 +302,6 @@ func TestRegexp(t *testing.T) {
 	}.Run(t, "stmt #/foo\\/bar\n/ #// #/\\./;")
 
 	// Fail on EOF at points in regexp parsing
-	// EOF after pound
-	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, _error,
-	}.Run(t, "stmt #")
-
 	// EOF in regexp (start)
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
@@ -283,6 +316,7 @@ func TestRegexp(t *testing.T) {
 }
 
 func TestString(t *testing.T) {
+	defer setlogf(t)()
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`""`), Value: ""}},
@@ -319,6 +353,7 @@ func TestString(t *testing.T) {
 }
 
 func TestBaseInteger(t *testing.T) {
+	defer setlogf(t)()
 	num := big.NewInt(-12345)
 	pos := big.NewInt(12345)
 	for base := 2; base <= 36; base++ {
@@ -345,26 +380,27 @@ func TestBaseInteger(t *testing.T) {
 		}).Run(t)
 	}
 
-	// Invalid things
+	// Invalid things -- these become words
 	badtext := []string{
 		`0#0`,
 		`1#0`,
 		`37#zz`,
 	}
 
-	bad := tokenSeq{
-		{Token: Token{Kind: TWord, Value: "stmt"}},
-		_ws, _error,
-	}
-
 	for _, c := range badtext {
+		want := strings.TrimRight(c, ";")
+		seq := tokenSeq{
+			{Token: Token{Kind: TWord, Raw: []byte(want), Value: want}},
+		}
 		t.Run(c, func(t *testing.T) {
-			bad.Run(t, `stmt `+c+`;`)
+			defer setlogf(t)()
+			seq.Run(t, c)
 		})
 	}
 }
 
 func TestInvalidStrings(t *testing.T) {
+	defer setlogf(t)()
 	invalid := tokenSeq{
 		{Token: Token{
 			Kind:  TWord,
@@ -412,6 +448,7 @@ func TestInvalidStrings(t *testing.T) {
 }
 
 func TestIntegers(t *testing.T) {
+	defer setlogf(t)()
 	neg := big.NewInt(-1234)
 	pos := big.NewInt(1234)
 	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
@@ -492,7 +529,6 @@ func TestIntegers(t *testing.T) {
 		;`)
 
 	// Check invalid cases
-	bad := tokenSeq{_error}
 	badValues := []string{
 		`4#`, `4#;`,
 		`4x`, `4x;`,
@@ -507,11 +543,19 @@ func TestIntegers(t *testing.T) {
 		`+`,
 	}
 	for _, c := range badValues {
-		t.Run(c, func(t *testing.T) { bad.Run(t, c) })
+		want := strings.TrimRight(c, ";")
+		seq := tokenSeq{
+			{Token: Token{Kind: TWord, Raw: []byte(want), Value: want}},
+		}
+		t.Run(c, func(t *testing.T) {
+			defer setlogf(t)()
+			seq.Run(t, c)
+		})
 	}
 }
 
 func TestRationals(t *testing.T) {
+	defer setlogf(t)()
 	zero := big.NewRat(0, 1)
 	neg := big.NewRat(-3, 4)
 	pos := big.NewRat(3, 4)
@@ -553,14 +597,19 @@ func TestRationals(t *testing.T) {
 		;`)
 
 	// Zero denominator -> error
-	tokenSeq{_error}.Run(t, `5/0`)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("5/0"), Value: "5/0"}},
+	}.Run(t, `5/0`)
 
 	// Fail on EOF in rational (needs a sentinel)
-	tokenSeq{_error}.Run(t, `5/`)
+	tokenSeq{
+		{Token: Token{Kind: TWord, Raw: []byte("5/"), Value: "5/"}},
+	}.Run(t, `5/`)
 }
 
 func TestLocationString(t *testing.T) {
 	const want = "2:34@45"
+	defer setlogf(t)()
 	loc := Location{
 		Line:   2,
 		Column: 34,
@@ -572,6 +621,7 @@ func TestLocationString(t *testing.T) {
 }
 
 func TestDecimals(t *testing.T) {
+	defer setlogf(t)()
 	dec := func(text string) tokenCase {
 		var f big.Float
 		f.SetPrec(DefaultPrecision)
@@ -631,8 +681,7 @@ func TestDecimals(t *testing.T) {
 			1.2345 12345e-4 1.2345e4 1.2345e+4
 		;`)
 
-	// Check invalid cases
-	bad := tokenSeq{_error}
+	// Check invalid cases that turn into words
 	badValues := []string{
 		`5z`,    // invalid char
 		`5ez`,   // invalid char
@@ -649,11 +698,19 @@ func TestDecimals(t *testing.T) {
 		`0.5e-`, // eof
 	}
 	for _, c := range badValues {
-		t.Run(c, func(t *testing.T) { bad.Run(t, c) })
+		seq := tokenSeq{
+			{Token: Token{Kind: TWord, Raw: []byte(c), Value: c}},
+		}
+		t.Run(c, func(t *testing.T) {
+			defer setlogf(t)()
+			seq.Run(t, c)
+		})
 	}
 }
 
 func TestDurations(t *testing.T) {
+	defer setlogf(t)()
+
 	dur := func(text string) tokenCase {
 		d, err := time.ParseDuration(text)
 		if err != nil {
@@ -671,6 +728,7 @@ func TestDurations(t *testing.T) {
 	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
 
 	t.Run("Valid", func(t *testing.T) {
+		defer setlogf(t)()
 		tokenSeq{
 			_stmt,
 			// Negative sign
@@ -734,8 +792,7 @@ func TestDurations(t *testing.T) {
 		;`)
 	})
 
-	// Check invalid cases
-	bad := tokenSeq{_error}
+	// Check invalid cases -- these become words
 	badValues := []string{
 		`1mz`,
 		`1h0`,
@@ -743,7 +800,6 @@ func TestDurations(t *testing.T) {
 		`1h0z`,
 		`1h0.0`,
 		`1h0.1`,
-		`1h0;`,
 		`1h0.`,
 		`1h0.5`,
 		`1h0.5n`,
@@ -756,8 +812,20 @@ func TestDurations(t *testing.T) {
 		`1h0.0z`,
 	}
 	for _, c := range badValues {
-		t.Run(c, func(t *testing.T) {
-			bad.Run(t, c)
+		want := strings.TrimRight(c, ";")
+		seq := tokenSeq{
+			{Token: Token{Kind: TWord, Raw: []byte(want), Value: want}},
+		}
+		t.Run("Bad/"+c, func(t *testing.T) {
+			defer setlogf(t)()
+			t.Logf("Parsing %q", c)
+			seq.Run(t, c)
 		})
 	}
+}
+
+func setlogf(t *testing.T) func() {
+	fn := logf
+	logf = t.Logf
+	return func() { logf = fn }
 }
