@@ -270,6 +270,7 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 		TDuration,
 		TRational,
 		TString,
+		TRawString,
 		TWord,
 		TBoolean,
 		TRegexp:
@@ -328,7 +329,7 @@ func (*mapBuilder) astparse() {}
 func (m *mapBuilder) addExpr(expr ExprNode) error {
 	if m.k == nil {
 		switch expr.Token().Kind {
-		case TWord, TString:
+		case TWord, TString, TRawString:
 			m.k = expr
 			return nil
 		}

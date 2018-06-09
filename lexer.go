@@ -51,9 +51,10 @@ const (
 	TBracketOpen  // '['
 	TBracketClose // ']'
 
-	TMapOpen // '#{'
-	TRegexp  // '#/' ( '\\/' | [^/] )* '/'
-	TString  // '"' ( Escape | [^"] )* '"'
+	TMapOpen   // '#{'
+	TRegexp    // '#/' ( '\\/' | [^/] )* '/'
+	TString    // '"' ( Escape | [^"] )* '"'
+	TRawString // '`' ( RawEscape | [^`] )* '`'
 
 	// TBoolean is produced by the parser transforming a boolean TWord into a TBoolean with
 	// a corresponding bool value.
@@ -310,20 +311,26 @@ func (l *Lexer) scanPos() Location {
 
 // Rune cases
 
+// isBarewordInitial returns true if r is a valid iniial rune for a bareword.
 func isBarewordInitial(r rune) bool {
 	return unicode.IsGraphic(r) &&
 		!isBarewordReserved(r) &&
 		!isBarewordForbidden(r)
 }
 
+// isBarewordForbidden returns true if r is one of the characters that may not appear in a bareword.
 func isBarewordForbidden(r rune) bool {
-	return r == '"' || isStatementSep(r) || unicode.IsControl(r)
+	return isStatementSep(r) || unicode.IsControl(r)
 }
 
+// isBarewordReserved returns true if r is one of the characters not permitted in a bareword initial
+// and reserved only for bareword tails.
 func isBarewordReserved(r rune) bool {
 	return r == '#' || r == '-' || r == '+' || isDecimal(r)
 }
 
+// isBarewordTail returns true if r is a valid tail rune for a bareword (i.e., is permitted after
+// the initial rune).
 func isBarewordTail(r rune) bool {
 	return unicode.IsGraphic(r) &&
 		!isBarewordForbidden(r)
@@ -331,12 +338,14 @@ func isBarewordTail(r rune) bool {
 
 func isStatementSep(r rune) bool {
 	return unicode.IsSpace(r) ||
-		r == ';' ||
-		r == '{' ||
-		r == '}' ||
-		r == '[' ||
-		r == ']' ||
-		r == '\''
+		r == ';' || // End statement
+		r == '{' || // Begin section (in statement)
+		r == '}' || // Close map (in statement)
+		r == '[' || // Open array
+		r == ']' || // Close array
+		r == '"' || // Quoted string
+		r == '`' || // Raw string
+		r == '\'' // Comment
 }
 
 func isLongIntervalInitial(r rune) bool {
@@ -465,6 +474,9 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 	case r == '"':
 		l.buffer(r, -1)
 		return noToken, l.lexString, nil
+	case r == '`':
+		l.buffer(r, -1)
+		return noToken, l.lexRawString, nil
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q at %v", r, l.pos)
 }
@@ -890,6 +902,34 @@ func (l *Lexer) lexBaseNumber(neg bool, base int) (consumer consumerFunc) {
 		return noToken, consumer, nil
 	}
 	return consumer
+}
+
+func (l *Lexer) lexRawString(r rune) (Token, consumerFunc, error) {
+	//
+	// Consume any rune between `s without filtering except for `` (which is an escaped `).
+	//
+	l.buffer(r, -1)
+	switch r {
+	case eof:
+		return noToken, l.lexRawString, ErrUnexpectedEOF
+	case '`':
+		return noToken, l.lexRawStringEscape, nil
+	}
+	l.buffer(-1, r)
+	return noToken, l.lexRawString, nil
+}
+
+func (l *Lexer) lexRawStringEscape(r rune) (Token, consumerFunc, error) {
+	//
+	// Either the subsequent rune after the previous ` is also a `, in which case it's escaped
+	// and part of the string, or the string has ended.
+	//
+	if r == '`' {
+		l.buffer(r, r)
+		return noToken, l.lexRawString, nil
+	}
+	l.unread()
+	return l.token(TRawString, true), l.lexSegment, nil
 }
 
 func (l *Lexer) lexString(r rune) (Token, consumerFunc, error) {

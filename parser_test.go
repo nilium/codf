@@ -116,11 +116,16 @@ func TestParseAST(t *testing.T) {
 						"2"     ' string
 						three   ' bareword (string)
 						true    ' bool (bareword->bool)
+						` + "`true`" + ` ' raw quote bool
 						]
+					   ` + "`raw`" + ` bare
 					}
 				];`,
 			Doc: doc().statement("foo", mkexpr([]ExprNode{
-				mkmap("k", mkexpr(mkexprs(1, "2", "three", true))),
+				mkmap(
+					"k", mkexpr(mkexprs(1, "2", "three", true, "true")),
+					"raw", "bare",
+				),
 			})).Doc(),
 		},
 		{

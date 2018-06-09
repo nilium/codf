@@ -290,6 +290,16 @@ func TestString(t *testing.T) {
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\a\b\f\n\r\t\v\\\""`), Value: "\a\b\f\n\r\t\v\\\""}},
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\123\xff\u7fff\U00001234"`), Value: "\123\xff\u7fff\U00001234"}},
 		_ws, {Token: Token{Kind: TString, Raw: []byte(`"\xFF"`), Value: "\xff"}},
+		_ws,
+		{Token: Token{Kind: TWord, Raw: []byte(`a`), Value: "a"}},
+		{Token: Token{Kind: TString, Raw: []byte(`"b"`), Value: "b"}},
+		{Token: Token{Kind: TWord, Raw: []byte(`c`), Value: "c"}},
+		_ws, {Token: Token{Kind: TRawString, Raw: []byte("`\"foo\x00bar\"`"), Value: "\"foo\x00bar\""}},
+		_ws, {Token: Token{Kind: TRawString, Raw: []byte("```foo\x00bar```"), Value: "`foo\x00bar`"}},
+		_ws, {Token: Token{Kind: TRawString, Raw: []byte("`foo \\bar `` \\\\ baz\\```"), Value: "foo \\bar ` \\\\ baz\\`"}},
+		_ws, {Token: Token{Kind: TRawString, Raw: []byte("`\\`"), Value: `\`}},
+		_ws, {Token: Token{Kind: TRawString, Raw: []byte("````"), Value: "`"}},
+		_ws, {Token: Token{Kind: TRawString, Raw: []byte("``"), Value: ""}},
 		_ws, _semicolon,
 		_eof,
 	}.Run(t,
@@ -298,6 +308,13 @@ func TestString(t *testing.T) {
 			"\a\b\f\n\r\t\v\\\""
 			"\123\xff\u7fff\U00001234"
 			"\xFF"
+			a"b"c
+			`+"`\"foo\x00bar\"`"+`
+			`+"```foo\x00bar```"+`
+			`+"`foo \\bar `` \\\\ baz\\```"+`
+			`+"`\\`"+`
+			`+"````"+`
+			`+"``"+`
 		;`)
 }
 
@@ -358,23 +375,31 @@ func TestInvalidStrings(t *testing.T) {
 	}
 
 	cases := []tokenSeqTest{
-		{Name: "EOF", Input: `stmt "`},
-		{Name: "Octal-Invalid", Input: `stmt "\60z";`},
-		{Name: "Octal-Invalid", Input: `stmt "\608";`},
-		{Name: "Octal-EOF", Input: `stmt "\`},
-		{Name: "Octal-EOF", Input: `stmt "\7`},
-		{Name: "Octal-EOF", Input: `stmt "\60`},
-		{Name: "Hex-Invalid", Input: `stmt "\xz";`},
-		{Name: "Hex-Invalid", Input: `stmt "\xfz";`},
-		{Name: "Hex-EOF", Input: `stmt "\x`},
-		{Name: "Hex-EOF", Input: `stmt "\xf`},
-		{Name: "Uni16-Invalid", Input: `stmt "\uff";`},
-		{Name: "Uni16-Invalid", Input: `stmt "\uffxx";`},
-		{Name: "Uni16-EOF", Input: `stmt "\uf`},
-		{Name: "Uni32-Invalid", Input: `stmt "\U12345";`},
-		{Name: "Uni32-Invalid", Input: `stmt "\U12345xx";`},
-		{Name: "Uni32-EOF", Input: `stmt "\U123456`},
-		{Name: "BadEscape", Input: `stmt "\z";`},
+		{Name: "Quote/EOF", Input: `stmt "`},
+		{Name: "Quote/EOF", Input: `stmt "after`},
+		{Name: "Quote/Octal-Invalid", Input: `stmt "\60z";`},
+		{Name: "Quote/Octal-Invalid", Input: `stmt "\608";`},
+		{Name: "Quote/Octal-EOF", Input: `stmt "\`},
+		{Name: "Quote/Octal-EOF", Input: `stmt "\7`},
+		{Name: "Quote/Octal-EOF", Input: `stmt "\60`},
+		{Name: "Quote/Hex-Invalid", Input: `stmt "\xz";`},
+		{Name: "Quote/Hex-Invalid", Input: `stmt "\xfz";`},
+		{Name: "Quote/Hex-EOF", Input: `stmt "\x`},
+		{Name: "Quote/Hex-EOF", Input: `stmt "\xf`},
+		{Name: "Quote/Uni16-Invalid", Input: `stmt "\uff";`},
+		{Name: "Quote/Uni16-Invalid", Input: `stmt "\uffxx";`},
+		{Name: "Quote/Uni16-EOF", Input: `stmt "\uf`},
+		{Name: "Quote/Uni32-Invalid", Input: `stmt "\U12345";`},
+		{Name: "Quote/Uni32-Invalid", Input: `stmt "\U12345xx";`},
+		{Name: "Quote/Uni32-EOF", Input: `stmt "\U123456`},
+		{Name: "Quote/BadEscape", Input: `stmt "\z";`},
+		{Name: "Quote/BadUTF8", Input: "stmt \"\xff"},
+		// Raw strings -- only really affected by EOF
+		{Name: "Raw/EOF", Input: "stmt `"},
+		{Name: "Raw/EOF", Input: "stmt `after"},
+		{Name: "Raw/EOF", Input: "stmt ```"},
+		{Name: "Raw/EOF", Input: "stmt ```after"},
+		{Name: "Raw/BadUTF8", Input: "stmt `\xff"},
 	}
 
 	for i, c := range cases {
