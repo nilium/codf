@@ -236,6 +236,10 @@ func TestStatement(t *testing.T) {
 		`)
 }
 
+func TestInvalidUTF8(t *testing.T) {
+	tokenSeq{_error}.Run(t, "\xff")
+}
+
 func TestStatementInvalid(t *testing.T) {
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("a"), Value: "a"}},

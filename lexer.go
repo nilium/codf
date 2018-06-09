@@ -253,6 +253,8 @@ func (l *Lexer) token(kind TokenKind, takeBuffer bool) Token {
 }
 
 func (l *Lexer) readRune() (r rune, err error) {
+	const invalid rune = '\uFFFD'
+
 	if l.pending {
 		l.pending = false
 		return l.lastScan.r, l.lastScan.err
@@ -268,6 +270,11 @@ func (l *Lexer) readRune() (r rune, err error) {
 	if size > 0 {
 		l.pos = l.pos.add(r, size)
 	}
+
+	if r == invalid && err == nil {
+		err = fmt.Errorf("invalid UTF-8 at %v", l.pos)
+	}
+
 	return
 }
 
