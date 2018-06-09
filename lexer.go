@@ -169,8 +169,6 @@ type scanResult struct {
 	err  error
 }
 
-var errStop = errors.New("lexer: stopped")
-
 var noToken Token
 
 // Lexer takes an input sequence of runes and constructs Tokens from it.
