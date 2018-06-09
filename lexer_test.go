@@ -395,7 +395,7 @@ func TestIntegers(t *testing.T) {
 		_ws, {Token: Token{Kind: TOctal, Value: neg, Raw: []byte("-02322")}},
 		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-8#2322")}},
 		_ws, {Token: Token{Kind: TInteger, Value: neg, Raw: []byte("-1234")}},
-		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-10#1234")}},
+		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-10#00001234")}},
 		_ws, {Token: Token{Kind: THex, Value: neg, Raw: []byte("-0x4d2")}},
 		_ws, {Token: Token{Kind: THex, Value: neg, Raw: []byte("-0X4D2")}},
 		_ws, {Token: Token{Kind: TBaseInt, Value: neg, Raw: []byte("-16#4D2")}},
@@ -433,7 +433,7 @@ func TestIntegers(t *testing.T) {
 			-02322
 			-8#2322
 			-1234
-			-10#1234
+			-10#00001234
 			-0x4d2
 			-0X4D2
 			-16#4D2
