@@ -13,12 +13,17 @@ import (
 	"unicode"
 )
 
+// DefaultPrecision is the default precision of TDecimal tokens produced by Lexer.
+// This can be overridden in the Lexer by setting its Precision field to a non-zero value.
 const DefaultPrecision = 80
 
+// ErrUnexpectedEOF is returned by the Lexer when EOF is encountered mid-token where a valid token
+// cannot be cut off.
 var ErrUnexpectedEOF = errors.New("unexpected EOF")
 
 const eof rune = -1
 
+// TokenKind is an enumeration of the kinds of tokens produced by a Lexer and consumed by a Parser.
 type TokenKind uint
 
 func (t TokenKind) String() string {
@@ -29,6 +34,7 @@ func (t TokenKind) String() string {
 	return tokenNames[t]
 }
 
+// Lex-able Token kinds encountered in codf.
 const (
 	tEmpty = TokenKind(iota)
 
@@ -49,11 +55,15 @@ const (
 	TRegexp  // '#/' ( '\\/' | [^/] )* '/'
 	TString  // '"' ( Escape | [^"] )* '"'
 
-	// TBoolean is produced when the lexer encounters a boolean word in the middle of
-	// a statement (i.e., after the first word and before a ; or {)
+	// TBoolean is produced by the parser transforming a boolean TWord into a TBoolean with
+	// a corresponding bool value.
 	TBoolean // Title/lower/UPPER of: 'true' | 'false' | 'yes' | 'no
 
-	// All numbers may implicitly begin with '-' or '+'
+	// All numbers may begin with '-' (negative) or '+' (positive).
+	// Numbers without signs are positive.
+
+	// Leading zeroes are only permitted on octal numbers or following the 'b', 'x', or '#' of
+	// a base number. For example, 10#00001 is the integer 1.
 
 	TInteger  // '0' | [1-9] [0-9]*
 	TDecimal  // Integer '.' Integer Exponent? | Integer Exponent
@@ -97,6 +107,29 @@ var tokenNames = []string{
 	TRational: "rational",
 }
 
+// Token is a token with a kind and a start and end location.
+// Start, end, and raw fields are considered metadata and should not be used by a parser except to
+// provide information to the user.
+//
+// Kind is a TokenKind, such as TWord, and Value is the corresponding value of that TokenKind.
+// Depending on the Kind, the Token must have a Value of the types described below. For all other
+// TokenKinds not in the table below, a Value is not expected.
+//
+//      | Kind      | Value Type     |
+//      |-----------+----------------|
+//      | TWord     | string         |
+//      | TString   | string         |
+//      | TRegexp   | *regexp.Regexp |
+//      | TBoolean  | bool           |
+//      | TDecimal  | *big.Float     |
+//      | TRational | *big.Rat       |
+//      | TInteger  | *big.Int       |
+//      | THex      | *big.Int       |
+//      | TOctal    | *big.Int       |
+//      | TBinary   | *big.Int       |
+//      | TBaseInt  | *big.Int       |
+//      | TDuration | time.Duration  |
+//
 type Token struct {
 	Start, End Location
 	Kind       TokenKind
@@ -104,10 +137,11 @@ type Token struct {
 	Value      interface{}
 }
 
+// Location describes a location in an input byte sequence.
 type Location struct {
-	Offset int
-	Line   int
-	Column int
+	Offset int // A byte offset into an input sequence. Starts at 0.
+	Line   int // A line number, delimited by '\n'. Starts at 1.
+	Column int // A column number. Starts at 1.
 }
 
 func (l Location) String() string {
@@ -139,6 +173,7 @@ var errStop = errors.New("lexer: stopped")
 
 var noToken Token
 
+// Lexer takes an input sequence of runes and constructs Tokens from it.
 type Lexer struct {
 	Precision uint
 
@@ -158,6 +193,7 @@ type Lexer struct {
 	strbuf bytes.Buffer
 }
 
+// NewLexer allocates a new Lexer that reads runes from r.
 func NewLexer(r io.RuneScanner) *Lexer {
 	le := &Lexer{
 		scanner: r,
@@ -166,6 +202,8 @@ func NewLexer(r io.RuneScanner) *Lexer {
 	return le
 }
 
+// ReadToken returns a token or an error. If EOF occurs, a TEOF token is returned without an error,
+// and will be returned by all subsequent calls to ReadToken.
 func (l *Lexer) ReadToken() (tok Token, err error) {
 	l.reset()
 	if l.next == nil {

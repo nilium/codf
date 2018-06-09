@@ -30,6 +30,7 @@ type Parser struct {
 	_ctx [6]parseNode
 }
 
+// NewParser allocates a new *Parser and returns it.
 func NewParser() *Parser {
 	doc := &Document{
 		Children: []Node{},
@@ -50,6 +51,10 @@ func (p *Parser) nextToken(tr TokenReader) (tok Token, err error) {
 	return tok, err
 }
 
+// Parse consumes tokens from a TokenReader and constructs a Document from its tokens.
+//
+// If an error occurs during parsing, Parse will return that error for all subsequent calls to
+// Parse, as the parser has been left in a middle-of-parsing state.
 func (p *Parser) Parse(tr TokenReader) (err error) {
 	if p.parseErr != nil {
 		return p.parseErr
@@ -79,14 +84,26 @@ func (p *Parser) Parse(tr TokenReader) (err error) {
 	return nil
 }
 
+// Document returns the document constructed by Parser.
+// Each call to Parse() modifies the Document, so it is unsafe to use the Document from multiple
+// goroutines during parsing.
 func (p *Parser) Document() *Document {
 	return p.doc
 }
 
+// TODO: Add ParseInContext() method to begin parsing while inside of a specific section or
+// document. Useful for handling, for example, `include file.conf;` inside of a config file as
+// a part of walking an AST.
+
+// pushContext pushes a new node-parsing context onto the parser stack.
 func (p *Parser) pushContext(node parseNode) {
 	p.ctx = append(p.ctx, node)
 }
 
+// popContext pops the current node-parsing context from the parser stack.
+// The previous context on the stack takes its place.
+//
+// Calling this while the stack is empty will panic.
 func (p *Parser) popContext() parseNode {
 	n := len(p.ctx) - 1
 	if n < 0 {
@@ -98,6 +115,8 @@ func (p *Parser) popContext() parseNode {
 	return ctx
 }
 
+// context returns the current node-parsing context on the stack.
+// If the stack is empty, this returns the document, since it is the implied root of the stack.
 func (p *Parser) context() parseNode {
 	n := len(p.ctx) - 1
 	if n < 0 {
@@ -280,8 +299,11 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 	return p.parseStatementSentinel(tok)
 }
 
+// ExpectedError is returned when a token, Tok, is encountered that does not meet expectations.
 type ExpectedError struct {
+	// Tok is the token that did not meet expectations.
 	Tok Token
+	// Msg is a message describing the expected token(s).
 	Msg string
 }
 
@@ -292,6 +314,7 @@ func unexpected(tok Token, msg string, args ...interface{}) *ExpectedError {
 	}
 }
 
+// Error is an implementation of error.
 func (e *ExpectedError) Error() string {
 	return "[" + e.Tok.Start.String() + "] unexpected " + e.Tok.Kind.String() + ": " + e.Msg
 }

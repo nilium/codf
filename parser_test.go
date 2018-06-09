@@ -106,7 +106,7 @@ func TestParseAST(t *testing.T) {
 			Src:  `foo 1 { bar [] #{}; } map #{} [];' eof`,
 			Doc: doc().section("foo", 1).
 				statement("bar", []ExprNode{}, mkmap()).
-				Up().statement("map", mkmap(), []ExprNode{}).
+				up().statement("map", mkmap(), []ExprNode{}).
 				Doc(),
 		},
 		{
@@ -276,12 +276,12 @@ type testNode interface {
 	statement(name string, args ...interface{}) testNode
 	section(name string, args ...interface{}) testNode
 	Doc() *Document
-	Up() testNode
+	up() testNode
 }
 
 type childSection struct {
-	up  testNode
-	doc *Document
+	parent testNode
+	doc    *Document
 	*Section
 }
 
@@ -289,8 +289,8 @@ func (s *childSection) Doc() *Document {
 	return s.doc
 }
 
-func (s *childSection) Up() testNode {
-	return s.up
+func (s *childSection) up() testNode {
+	return s.parent
 }
 
 func (s *childSection) statement(name string, args ...interface{}) testNode {
@@ -310,7 +310,7 @@ func (s *childSection) section(name string, args ...interface{}) testNode {
 	}
 	s.Children = append(s.Children, ch)
 	return &childSection{
-		up:      s,
+		parent:  s,
 		doc:     s.doc,
 		Section: ch,
 	}
@@ -320,7 +320,7 @@ func (d *Document) Doc() *Document {
 	return d
 }
 
-func (d *Document) Up() testNode {
+func (d *Document) up() testNode {
 	return d
 }
 
@@ -341,7 +341,7 @@ func (d *Document) section(name string, args ...interface{}) testNode {
 	}
 	d.Children = append(d.Children, ch)
 	return &childSection{
-		up:      d,
+		parent:  d,
 		doc:     d,
 		Section: ch,
 	}
