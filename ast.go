@@ -250,8 +250,6 @@ type MapEntry struct {
 	Val ExprNode
 }
 
-func (m *MapEntry) astnode() {}
-
 func (m *MapEntry) Token() Token {
 	return m.Key.Token()
 }
