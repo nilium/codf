@@ -170,26 +170,18 @@ func (p *Parser) beginSegment(tok Token) (tokenConsumer, error) {
 		// Start statement
 		stmt := &Statement{NameTok: &Literal{tok}}
 		p.pushContext(stmt)
-		return skipWhitespace(p.parseStatement, nil, false), nil
+		return skipWhitespace(p.parseStatement), nil
 	}
 	return nil, unexpected(tok, "expected statement or section name")
 }
 
-func skipWhitespace(next, otherwise tokenConsumer, required bool) (consumer tokenConsumer) {
-	seen := !required
+func skipWhitespace(next tokenConsumer) (consumer tokenConsumer) {
 	consumer = func(tok Token) (tokenConsumer, error) {
 		switch tok.Kind {
 		case TWhitespace, TComment:
-			seen = true
 			return consumer, nil
 		}
-
-		if seen {
-			return next(tok)
-		} else if otherwise == nil {
-			return nil, unexpected(tok, "expected whitespace")
-		}
-		return otherwise(tok)
+		return next(tok)
 	}
 	return consumer
 }
@@ -215,7 +207,7 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 			if err := p.context().(segmentNode).addExpr(ary); err != nil {
 				return nil, err
 			}
-			return skipWhitespace(p.parseStatement, p.parseStatementSentinel, true), nil
+			return skipWhitespace(p.parseStatement), nil
 		}
 		return nil, p.closeError(tok)
 
@@ -223,7 +215,7 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 		if mb, ok := p.context().(*mapBuilder); ok {
 			if mb.k != nil {
 				return nil, unexpected(tok, "expected value for key %q at %v",
-					mb.k.Token().Value, mb.k.Token().Start)
+					mb.m.Token().Value, mb.m.Token().Start)
 			}
 			p.popContext()
 			m := mb.m
@@ -231,7 +223,7 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 			if err := p.context().(segmentNode).addExpr(m); err != nil {
 				return nil, err
 			}
-			return skipWhitespace(p.parseStatement, p.parseStatementSentinel, true), nil
+			return skipWhitespace(p.parseStatement), nil
 		}
 		return nil, p.closeError(tok)
 
@@ -253,14 +245,14 @@ func (p *Parser) beginArray(tok Token) (tokenConsumer, error) {
 		StartTok: tok,
 		Elems:    []ExprNode{},
 	})
-	return skipWhitespace(p.parseStatement, nil, false), nil
+	return skipWhitespace(p.parseStatement), nil
 }
 
 func (p *Parser) beginMap(tok Token) (tokenConsumer, error) {
 	m := newMapBuilder()
 	m.m.StartTok = tok
 	p.pushContext(m)
-	return skipWhitespace(p.parseStatement, nil, false), nil
+	return skipWhitespace(p.parseStatement), nil
 }
 
 func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
@@ -289,11 +281,7 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 		if err := p.context().(segmentNode).addExpr(&Literal{tok}); err != nil {
 			return nil, err
 		}
-		return skipWhitespace(
-			p.parseStatement,
-			p.parseStatementSentinel,
-			true,
-		), nil
+		return skipWhitespace(p.parseStatement), nil
 	}
 
 	return p.parseStatementSentinel(tok)

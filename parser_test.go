@@ -124,6 +124,13 @@ func TestParseAST(t *testing.T) {
 			})).Doc(),
 		},
 		{
+			Name: "MinimalSpace",
+			Src:  `sect[]#{}{stmt #{k[2]"p"#{}}true[false];}`,
+			Doc: doc().section("sect", mkexprs(), mkmap()).
+				statement("stmt", mkmap("k", mkexprs(2), "p", mkmap()), true, mkexprs(false)).
+				Doc(),
+		},
+		{
 			Name: "AllLiterals",
 			Src: `
 				stmt
@@ -162,7 +169,6 @@ func TestParseAST(t *testing.T) {
 				false, false, false, "falsE",
 			).Doc(),
 		},
-		{Fun: mustNotParse, Name: "BadMapClose", Src: `src x[];`},
 		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{;};`},
 		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{ k };`},
 		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{ 1234 five };`},
