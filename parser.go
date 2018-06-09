@@ -353,7 +353,7 @@ func (m *mapBuilder) addExpr(expr ExprNode) error {
 			m.k.Token().Raw, m.k.Token().Start)
 	}
 
-	entry, ok := m.m.Elems[ks]
+	entry := m.m.Elems[ks]
 	if entry == nil {
 		entry = &MapEntry{}
 		m.m.Elems[ks] = entry
