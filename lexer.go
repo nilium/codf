@@ -151,9 +151,6 @@ func (l Location) String() string {
 }
 
 func (l Location) add(r rune, size int) Location {
-	if size < 1 {
-		return l
-	}
 	l.Offset += size
 	l.Column++
 	if r == '\n' {
