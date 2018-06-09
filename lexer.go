@@ -185,7 +185,6 @@ type Lexer struct {
 	pos      Location
 
 	next consumerFunc
-	err  error
 
 	buf    bytes.Buffer
 	strbuf bytes.Buffer
