@@ -6,10 +6,15 @@ import (
 
 type tokenConsumer func(Token) (tokenConsumer, error)
 
+// TokenReader is anything capable of reading a token and returning either it or an error.
 type TokenReader interface {
 	ReadToken() (Token, error)
 }
 
+// Parser consumes tokens from a TokenReader and constructs a codf *Document from it.
+//
+// The Document produced by the Parser is kept for the duration of the parser's lifetime, so it is
+// possible to read multiple TokenReaders into a Parser and produce a combined document.
 type Parser struct {
 	doc  *Document
 	next tokenConsumer
@@ -35,7 +40,6 @@ func NewParser() *Parser {
 	}
 
 	p.ctx = p._ctx[:0]
-	p.pushContext(doc)
 
 	return p
 }
@@ -85,6 +89,9 @@ func (p *Parser) pushContext(node parseNode) {
 
 func (p *Parser) popContext() parseNode {
 	n := len(p.ctx) - 1
+	if n < 0 {
+		panic("cannot pop document from parsing stack")
+	}
 	ctx := p.ctx[n]
 	p.ctx[n] = nil
 	p.ctx = p.ctx[:n]
@@ -93,6 +100,9 @@ func (p *Parser) popContext() parseNode {
 
 func (p *Parser) context() parseNode {
 	n := len(p.ctx) - 1
+	if n < 0 {
+		return p.doc
+	}
 	return p.ctx[n]
 }
 
