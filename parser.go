@@ -266,7 +266,7 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 		TBinary,
 		TOctal,
 		THex,
-		TDecimal,
+		TFloat,
 		TDuration,
 		TRational,
 		TString,

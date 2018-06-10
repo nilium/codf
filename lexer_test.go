@@ -415,6 +415,11 @@ func TestBaseInteger(t *testing.T) {
 	}
 }
 
+func TestInvalidNumber(t *testing.T) {
+	tokenSeq{_error}.Run(t, "4#\x00")
+	tokenSeq{_error}.Run(t, "1e0\x00")
+}
+
 func TestInvalidStrings(t *testing.T) {
 	defer setlogf(t)()
 	invalid := tokenSeq{
@@ -636,7 +641,7 @@ func TestLocationString(t *testing.T) {
 	}
 }
 
-func TestDecimals(t *testing.T) {
+func TestFloats(t *testing.T) {
 	defer setlogf(t)()
 	dec := func(text string) tokenCase {
 		var f big.Float
@@ -646,7 +651,7 @@ func TestDecimals(t *testing.T) {
 		}
 		return tokenCase{
 			Token: Token{
-				Kind:  TDecimal,
+				Kind:  TFloat,
 				Raw:   []byte(text),
 				Value: &f,
 			},
@@ -755,7 +760,7 @@ func TestDurations(t *testing.T) {
 			_ws, dur("-1h234m7s"),
 			_ws, dur("-1h"),
 			_ws, dur("-60m"),
-			_ws, dur("-0.5s"),
+			_ws, dur("-0.05s"),
 			_ws, dur("-500ms"),
 			_ws, dur("-0.5ms"),
 			_ws, dur("-500us"),
@@ -768,7 +773,7 @@ func TestDurations(t *testing.T) {
 			_ws, dur("+1h234m7s"),
 			_ws, dur("+1h"),
 			_ws, dur("+60m"),
-			_ws, dur("+0.5s"),
+			_ws, dur("+0.05s"),
 			_ws, dur("+500ms"),
 			_ws, dur("+0.5ms"),
 			_ws, dur("+500us"),
@@ -781,30 +786,30 @@ func TestDurations(t *testing.T) {
 			_ws, dur("1h234m7s"),
 			_ws, dur("1h"),
 			_ws, dur("60m"),
-			_ws, dur("0.5s"),
+			_ws, dur("0.05s"),
 			_ws, dur("500ms"),
 			_ws, dur("0.5ms"),
 			_ws, dur("500us"),
 			_ws, dur("500μs"),
 			_ws, dur("1h0.25m"),
-			_ws, dur("1h0m0.0s"),
+			_ws, dur("1h0m0.05s"),
 			_ws, _semicolon,
 			_eof,
 		}.Run(t, `stmt
 			-0s -1ns -0ns -0.0s
 			-1h234m7s -1h -60m
-			-0.5s -500ms
+			-0.05s -500ms
 			-0.5ms -500us -500μs
 			+0s +1ns +0ns +0.0s
 			+1h234m7s +1h +60m
-			+0.5s +500ms
+			+0.05s +500ms
 			+0.5ms +500us +500μs
 			0s 1ns 0ns 0.0s
 			1h234m7s 1h 60m
-			0.5s 500ms
+			0.05s 500ms
 			0.5ms 500us 500μs
 			1h0.25m
-			1h0m0.0s
+			1h0m0.05s
 		;`)
 	})
 

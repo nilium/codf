@@ -203,7 +203,7 @@ func mkdec(str string) *Literal {
 	}
 	return &Literal{
 		Tok: Token{
-			Kind:  TDecimal,
+			Kind:  TFloat,
 			Value: f,
 		},
 	}
