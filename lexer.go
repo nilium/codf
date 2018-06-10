@@ -496,7 +496,7 @@ func (l *Lexer) lexWordTail(next consumerFunc) consumerFunc {
 }
 
 func (l *Lexer) lexBecomeWord(r rune) (Token, consumerFunc, error) {
-	if r > 0 {
+	if r >= 0 {
 		l.buffer(r, r)
 	}
 	return noToken, l.lexWordTail(l.lexSegmentTail), nil
