@@ -393,7 +393,7 @@ func BigFloat(node Node) (v *big.Float) {
 
 // Float64 returns the value held by node as a float64 and true.
 // Integer and rational nodes are converted to floats.
-// If the node doesn't hold a float, integer, or rational, it returns 0 and false..
+// If the node doesn't hold a float, integer, or rational, it returns 0 and false.
 func Float64(node Node) (v float64, ok bool) {
 	switch vi := Value(node).(type) {
 	case *big.Int:
