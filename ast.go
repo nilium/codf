@@ -8,17 +8,22 @@ import (
 	"time"
 )
 
+// parseNode is any Node that can be used in parsing as a context.
 type parseNode interface {
+	// astparse is an empty function used to identify a parseNode.
 	astparse()
 }
 
+// parentNode is any parseNode that accepts nodes as children during parsing.
 type parentNode interface {
 	parseNode
 	addChild(node Node)
 }
 
+// Document is the root of a codf document -- it is functionally similar to a Section, but is
+// unnamed and has no parameters.
 type Document struct {
-	Children []Node
+	Children []Node // Sections and Statements that make up the Document.
 }
 
 func (d *Document) String() string {
@@ -29,29 +34,36 @@ func (d *Document) String() string {
 	return strings.Join(strs, "\n")
 }
 
+// addChild adds a section or statement to the Document's children.
 func (d *Document) addChild(node Node) {
 	d.Children = append(d.Children, node)
 }
 
 func (*Document) astparse() {}
 
+// Node is any parsed element of a codf document. This includes the Section, Statement, Literal,
+// Array, Map, and other types.
 type Node interface {
 	Token() Token
 	astnode()
 	format(prefix string) string
 }
 
+// segmentNode is any section- or statement-like parseNode that accepts parameters (values). This
+// includes maps and arrays, as well, which also function as parser contexts.
 type segmentNode interface {
 	parseNode
 	addExpr(ExprNode) error
 }
 
+// ExprNode is a Node that has a concrete value associated with itself, such as a string, bool,
+// rational, or other parse-able value.
 type ExprNode interface {
 	Node
 	Value() interface{}
 }
 
-// Statement is any single word followed by literals (Params).
+// Statement is any single word followed by an optional set of ExprNodes for parameters.
 type Statement struct {
 	NameTok *Literal
 	Params  []ExprNode
@@ -79,6 +91,8 @@ func (s *Statement) addExpr(node ExprNode) error {
 	return nil
 }
 
+// Name returns the name of the Statement.
+// For example, the statement "enable-gophers yes;" has the name "enable-gophers".
 func (s *Statement) Name() string {
 	str, _ := String(s.NameTok)
 	return str
@@ -86,10 +100,13 @@ func (s *Statement) Name() string {
 
 func (s *Statement) astnode() {}
 
+// Token returns the first Token of the statement (its name token).
 func (s *Statement) Token() Token {
 	return s.NameTok.Token()
 }
 
+// promote is used in a parsing context to convert a statement to a section when a curly brace is
+// encountered.
 func (s *Statement) promote() *Section {
 	return &Section{
 		NameTok:  s.NameTok,
@@ -98,7 +115,7 @@ func (s *Statement) promote() *Section {
 	}
 }
 
-// Section is a single word follow by zero or more literals.
+// Section is a single word follow by an optional set of ExprNodes for parameters.
 // A Section may contain children Statements and Sections.
 type Section struct {
 	NameTok  *Literal
@@ -134,6 +151,8 @@ func (s *Section) format(prefix string) string {
 
 func (*Section) astparse() {}
 
+// Name returns the name of the Section.
+// For example, the section "proxy http { }" has the name "proxy".
 func (s *Section) Name() string {
 	str, _ := String(s.NameTok)
 	return str
@@ -141,6 +160,7 @@ func (s *Section) Name() string {
 
 func (s *Section) astnode() {}
 
+// Token returns the first token of the section (its name token).
 func (s *Section) Token() Token {
 	return s.NameTok.Token()
 }
@@ -149,6 +169,7 @@ func (s *Section) addChild(node Node) {
 	s.Children = append(s.Children, node)
 }
 
+// Map is an ExprNode for a '#{ key value }' map in a document.
 type Map struct {
 	StartTok Token
 	EndTok   Token
@@ -175,14 +196,19 @@ func (m *Map) format(prefix string) string {
 
 func (m *Map) astnode() {}
 
+// Token returns the first Token of the map (its opening '#{' token).
 func (m *Map) Token() Token {
 	return m.StartTok
 }
 
+// Value returns the map's elements as its value.
+// This is always a value of the type map[string]*MapEntry.
 func (m *Map) Value() interface{} {
 	return m.Elems
 }
 
+// Pairs returns the map's elements as a []*MapEntry.
+// The returned slice ordered by each MapEntry's Ord field (i.e., the parsing order).
 func (m *Map) Pairs() []*MapEntry {
 	entries := make([]*MapEntry, 0, len(m.Elems))
 	for _, p := range m.Elems {
@@ -195,6 +221,7 @@ func (m *Map) Pairs() []*MapEntry {
 	return entries
 }
 
+// Array is an ExprNode for a '[ value ]' array in a document.
 type Array struct {
 	StartTok Token
 	EndTok   Token
@@ -226,14 +253,20 @@ func (a *Array) addExpr(node ExprNode) error {
 
 func (a *Array) astnode() {}
 
+// Token returns the first Token of the array (its opening bracket).
 func (a *Array) Token() Token {
 	return a.StartTok
 }
 
+// Value returns the elements of the array.
+// This is always a value of the type []ExprNode.
 func (a *Array) Value() interface{} {
 	return a.Elems
 }
 
+// MapEntry is an entry in a codf map, containing the key, value, and an ord field -- an integer for
+// determining the order of keys in the map as parsed. The order of keys in a map is unordered and
+// information is only retained for writing tools.
 type MapEntry struct {
 	// Ord is an integer for ordering entries in the map.
 	// There can be gaps in Ord for a range. Duplicate keys
@@ -254,6 +287,7 @@ func (m *MapEntry) String() string {
 	return m.format("")
 }
 
+// Token returns the first token of the MapEntry's key-value pair (its key token).
 func (m *MapEntry) Token() Token {
 	return m.Key.Token()
 }
@@ -264,10 +298,14 @@ func (m *MapEntry) Name() string {
 	return s
 }
 
+// Value returns the MapEntry's value as a string.
+// The entire AST is invalid if this returns nil.
 func (m *MapEntry) Value() interface{} {
 	return m.Val.Value()
 }
 
+// Literal is an ExprNode containing a value that is either a string, number (integer, float, or
+// rational), regexp, duration, or boolean.
 type Literal struct {
 	Tok Token
 }
@@ -278,14 +316,23 @@ func (l *Literal) format(prefix string) string {
 
 func (l *Literal) astnode() {}
 
+// Token returns the literal's corresponding Token.
 func (l *Literal) Token() Token {
 	return l.Tok
 }
 
+// Value returns the literal's value.
+// Depending on the token, this can be a value of type string, boolean, *big.Int, *big.Float,
+// *big.Rat, time.Duration, or *regexp.Regexp.
+// The entire AST is invalid if this returns nil.
 func (l *Literal) Value() interface{} {
 	return l.Tok.Value
 }
 
+// Value returns the value of node.
+// If node is an ExprNode, it will return that node's value.
+// Otherwise, it will return any value associated with the node's token.
+// It may be nil for nodes whose token is punctuation or an opening brace or bracket.
 func Value(node Node) interface{} {
 	switch node := node.(type) {
 	case ExprNode:
@@ -295,41 +342,58 @@ func Value(node Node) interface{} {
 	}
 }
 
+// Regexp returns the value held by node as a *regexp.Regexp.
+// If the node doesn't hold a regexp, it returns nil.
 func Regexp(node Node) (v *regexp.Regexp) {
 	v, _ = Value(node).(*regexp.Regexp)
 	return
 }
 
+// Duration returns the value held by node as a time.Duration and true.
+// If the node doesn't hold a duration, it returns 0 and false.
 func Duration(node Node) (v time.Duration, ok bool) {
 	v, ok = Value(node).(time.Duration)
 	return
 }
 
+// Bool returns the value held by node as a boolean and true.
+// If the node doesn't hold a boolean, it returns false for both values (v and ok).
 func Bool(node Node) (v, ok bool) {
 	v, ok = Value(node).(bool)
 	return
 }
 
+// String returns the value held by node as a string and true.
+// If the node doesn't hold a string, it returns the empty string and false.
 func String(node Node) (str string, ok bool) {
 	str, ok = Value(node).(string)
 	return
 }
 
+// BigRat returns the value held by node as a *big.Rat.
+// If the node doesn't hold a rational, it returns nil.
 func BigRat(node Node) (v *big.Rat) {
 	v, _ = Value(node).(*big.Rat)
 	return
 }
 
+// BigInt returns the value held by node as a *big.Int.
+// If the node doesn't hold an integer, it returns nil.
 func BigInt(node Node) (v *big.Int) {
 	v, _ = Value(node).(*big.Int)
 	return
 }
 
+// BigFloat returns the value held by node as a *big.Float.
+// If the node doesn't hold a float, it returns nil.
 func BigFloat(node Node) (v *big.Float) {
 	v, _ = Value(node).(*big.Float)
 	return
 }
 
+// Float64 returns the value held by node as a float64 and true.
+// Integer and rational nodes are converted to floats.
+// If the node doesn't hold a float, integer, or rational, it returns 0 and false..
 func Float64(node Node) (v float64, ok bool) {
 	switch vi := Value(node).(type) {
 	case *big.Int:
@@ -344,6 +408,11 @@ func Float64(node Node) (v float64, ok bool) {
 	return 0, false
 }
 
+// Int64 returns the value held by node as an int64 and true.
+// Float and rational nodes are converted to floats.
+// If the node is a rational and it is not an integer already, it is converted to a float and
+// truncated to an integer.
+// If the node doesn't hold an integer, float, or rational, it returns 0 and false.
 func Int64(node Node) (v int64, ok bool) {
 	switch vi := Value(node).(type) {
 	case *big.Int:
