@@ -134,11 +134,6 @@ func (s *Section) format(prefix string) string {
 
 func (*Section) astparse() {}
 
-func (s *Section) addExpr(node ExprNode) error {
-	s.Params = append(s.Params, node)
-	return nil
-}
-
 func (s *Section) Name() string {
 	str, _ := String(s.NameTok)
 	return str
@@ -173,7 +168,7 @@ func (m *Map) format(prefix string) string {
 	pieces := make([]string, len(pairs))
 	indent := prefix + "\t"
 	for i, p := range pairs {
-		pieces[i] = indent + p.Key.format(indent) + " " + p.Val.format(indent)
+		pieces[i] = p.format(indent)
 	}
 	return "#{\n" + strings.Join(pieces, "\n") + "\n" + prefix + "}"
 }
@@ -249,8 +244,24 @@ type MapEntry struct {
 	Val ExprNode
 }
 
+func (*MapEntry) astnode() {}
+
+func (m *MapEntry) format(prefix string) string {
+	return prefix + m.Key.format(prefix) + " " + m.Val.format(prefix)
+}
+
+func (m *MapEntry) String() string {
+	return m.format("")
+}
+
 func (m *MapEntry) Token() Token {
 	return m.Key.Token()
+}
+
+// Name returns the MapEntry's key as a string.
+func (m *MapEntry) Name() string {
+	s, _ := String(m.Key)
+	return s
 }
 
 func (m *MapEntry) Value() interface{} {
