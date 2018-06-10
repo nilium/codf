@@ -4,7 +4,6 @@ import (
 	"math/big"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -330,10 +329,6 @@ func Float64(node Node) (v float64, ok bool) {
 	case *big.Float:
 		v, _ = vi.Float64()
 		return v, true
-	case string:
-		var err error
-		v, err = strconv.ParseFloat(vi, 64)
-		return v, err == nil
 	}
 	return 0, false
 }
@@ -351,10 +346,6 @@ func Int64(node Node) (v int64, ok bool) {
 	case *big.Float:
 		v, _ = vi.Int64()
 		return v, true
-	case string:
-		var err error
-		v, err = strconv.ParseInt(vi, 0, 64)
-		return v, err == nil
 	}
 	return 0, false
 }

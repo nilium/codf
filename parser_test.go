@@ -25,6 +25,7 @@ func mustParse(t *testing.T, in string) *Document {
 	if err != nil {
 		t.Fatalf("Parse(..) error = %v; want nil", err)
 	}
+	t.Logf("-------- DOCUMENT --------\n%s\n------ END DOCUMENT ------", doc)
 	return doc
 }
 
@@ -83,15 +84,18 @@ type parseTestCase struct {
 	Fun  func(*testing.T, string) *Document
 }
 
+func (p parseTestCase) RunSubtest(t *testing.T) {
+	t.Run(p.Name, p.Run)
+
+}
+
 func (p parseTestCase) Run(t *testing.T) {
-	t.Run(p.Name, func(t *testing.T) {
-		fn := p.Fun
-		if fn == nil {
-			fn = mustParse
-		}
-		doc := fn(t, p.Src)
-		objectsEqual(t, "", doc, p.Doc)
-	})
+	fn := p.Fun
+	if fn == nil {
+		fn = mustParse
+	}
+	doc := fn(t, p.Src)
+	objectsEqual(t, "", doc, p.Doc)
 }
 
 func TestParseAST(t *testing.T) {
@@ -192,8 +196,42 @@ func TestParseAST(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c.Run(t)
+		c.RunSubtest(t)
 	}
+}
+
+func TestParseExample(t *testing.T) {
+	const exampleSource = `server go.spiff.io {
+    listen 0.0.0.0:80;
+    control unix:///var/run/httpd.sock;
+    proxy unix:///var/run/go-redirect.sock {
+        strip-x-headers yes;
+        log-access no;
+    }
+    ' keep caches in 64mb of memory
+    cache memory 64mb {
+         expire 10m 404;
+         expire 1h  301 302;
+         expire 5m  200;
+    }
+}`
+
+	parseTestCase{
+		Src: exampleSource,
+		Doc: doc().
+			section("server", "go.spiff.io").
+			/* server */ statement("listen", "0.0.0.0:80").
+			/* server */ statement("control", "unix:///var/run/httpd.sock").
+			/* server */ section("proxy", "unix:///var/run/go-redirect.sock").
+			/* server */ /* proxy */ statement("strip-x-headers", true).
+			/* server */ /* proxy */ statement("log-access", false).
+			/* server */ up().
+			/* server */ section("cache", "memory", "64mb").
+			/* server */ /* cache */ statement("expire", time.Minute*10, 404).
+			/* server */ /* cache */ statement("expire", time.Hour, 301, 302).
+			/* server */ /* cache */ statement("expire", time.Minute*5, 200).
+			Doc(),
+	}.Run(t)
 }
 
 func mkdec(str string) *Literal {
