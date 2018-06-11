@@ -16,6 +16,63 @@ type Node interface {
 	format(prefix string) string
 }
 
+// Each iterates over each child or parameter of the base node and passes its index and the Node to
+// fn. If fn returns an error, it breaks and returns the error.
+//
+// Each does not recursively iterate over nodes.
+func Each(base Node, fn func(int, Node) error) error {
+	switch base := base.(type) {
+	case ParentNode:
+		for i, ch := range base.Nodes() {
+			if err := fn(i, ch); err != nil {
+				return err
+			}
+		}
+	case ParamNode:
+		for i, ch := range base.Parameters() {
+			if err := fn(i, ch); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Select selects any child ParamNode of the base node whose name is present in names.
+// This can be used to grab specific statements or sections as needed from the AST.
+func Select(base Node, names ...string) []Node {
+	if len(names) == 0 {
+		return nil
+	}
+
+	par, ok := base.(ParentNode)
+	if !ok {
+		return nil
+	}
+
+	subs := par.Nodes()
+	nodes := make([]Node, 0, len(subs))
+
+	match := func(name string) bool { return name == names[0] }
+	if len(names) > 1 {
+		nameset := make(map[string]struct{}, len(names))
+		for _, k := range names {
+			nameset[k] = struct{}{}
+		}
+		match = func(name string) bool {
+			_, ok := nameset[name]
+			return ok
+		}
+	}
+
+	for _, sub := range subs {
+		if psub, ok := sub.(ParamNode); ok && match(psub.Name()) {
+			nodes = append(nodes, sub)
+		}
+	}
+	return nodes
+}
+
 // ParentNode is a node that has sub-nodes.
 type ParentNode interface {
 	Node
