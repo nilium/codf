@@ -8,6 +8,41 @@ import (
 	"time"
 )
 
+// Node is any parsed element of a codf document. This includes the Section, Statement, Literal,
+// Array, Map, and other types.
+type Node interface {
+	Token() Token
+	astnode()
+	format(prefix string) string
+}
+
+// ParentNode is a node that has sub-nodes.
+type ParentNode interface {
+	Node
+	Nodes() []Node
+}
+
+// ParamNode is a node that has ExprNode parameters.
+type ParamNode interface {
+	Node
+	Name() string
+	Parameters() []ExprNode
+}
+
+// segmentNode is any section- or statement-like parseNode that accepts parameters (values). This
+// includes maps and arrays, as well, which also function as parser contexts.
+type segmentNode interface {
+	parseNode
+	addExpr(ExprNode) error
+}
+
+// ExprNode is a Node that has a concrete value associated with itself, such as a string, bool,
+// rational, or other parse-able value.
+type ExprNode interface {
+	Node
+	Value() interface{}
+}
+
 // parseNode is any Node that can be used in parsing as a context.
 type parseNode interface {
 	// astparse is an empty function used to identify a parseNode.
@@ -26,12 +61,27 @@ type Document struct {
 	Children []Node // Sections and Statements that make up the Document.
 }
 
+func (*Document) astnode() {}
+
+func (d *Document) Nodes() []Node {
+	return d.Children
+}
+
+// Token returns an empty token, as documents are the root node and only contain other nodes.
+func (*Document) Token() Token {
+	return noToken
+}
+
 func (d *Document) String() string {
+	return d.format("")
+}
+
+func (d *Document) format(prefix string) string {
 	strs := make([]string, len(d.Children))
 	for i, n := range d.Children {
 		strs[i] = n.format("")
 	}
-	return strings.Join(strs, "\n")
+	return prefix + strings.Join(strs, "\n"+prefix)
 }
 
 // addChild adds a section or statement to the Document's children.
@@ -41,34 +91,16 @@ func (d *Document) addChild(node Node) {
 
 func (*Document) astparse() {}
 
-// Node is any parsed element of a codf document. This includes the Section, Statement, Literal,
-// Array, Map, and other types.
-type Node interface {
-	Token() Token
-	astnode()
-	format(prefix string) string
-}
-
-// segmentNode is any section- or statement-like parseNode that accepts parameters (values). This
-// includes maps and arrays, as well, which also function as parser contexts.
-type segmentNode interface {
-	parseNode
-	addExpr(ExprNode) error
-}
-
-// ExprNode is a Node that has a concrete value associated with itself, such as a string, bool,
-// rational, or other parse-able value.
-type ExprNode interface {
-	Node
-	Value() interface{}
-}
-
 // Statement is any single word followed by an optional set of ExprNodes for parameters.
 type Statement struct {
 	NameTok *Literal
 	Params  []ExprNode
 
 	EndTok Token
+}
+
+func (s *Statement) Parameters() []ExprNode {
+	return s.Params
 }
 
 func (s *Statement) String() string {
@@ -124,6 +156,14 @@ type Section struct {
 
 	StartTok Token
 	EndTok   Token
+}
+
+func (s *Section) Nodes() []Node {
+	return s.Children
+}
+
+func (s *Section) Parameters() []ExprNode {
+	return s.Params
 }
 
 func (s *Section) String() string {
