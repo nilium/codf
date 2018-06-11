@@ -40,21 +40,23 @@ const (
 
 	TEOF // !.
 
-	TWhitespace // [ \n\r\t]+
-	TComment    // '\'' { !EOL . } ( EOL | EOF )
+	// BarewordRune := ![;{}\[\]"'`] Unicode(L,M,N,P,S)
 
-	TWord // BarewordRune {BarewordRune}
-
+	TWhitespace   // [ \n\r\t]+
+	TComment      // '\'' { !EOL . } ( EOL | EOF )
+	TWord         // BarewordRune {BarewordRune}
 	TSemicolon    // ';'
 	TCurlOpen     // '{'
 	TCurlClose    // '}'
 	TBracketOpen  // '['
 	TBracketClose // ']'
+	TMapOpen      // '#{'
+	TRegexp       // '#/' { '\\/' | [^/] } '/'
 
-	TMapOpen   // '#{'
-	TRegexp    // '#/' ( '\\/' | [^/] )* '/'
+	// Strings also include TWord, above, which is an unquoted string.
+	// Escape := '\\' ( [abfnrtv\\"] | 'x' Hex2 | 'u' Hex4 | 'U' Hex8 | Oct3 )
 	TString    // '"' ( Escape | [^"] )* '"'
-	TRawString // '`' ( RawEscape | [^`] )* '`'
+	TRawString // '`' ( '``' | [^`] )* '`'
 
 	// TBoolean is produced by the parser transforming a boolean TWord into a TBoolean with
 	// a corresponding bool value.
@@ -170,28 +172,6 @@ type scanResult struct {
 var noToken Token
 
 // Lexer takes an input sequence of runes and constructs Tokens from it.
-//
-// The Lexer converts input runs to tokens using the following rules:
-//
-//  Word := Graphical {Graphical}
-//  String := '"' { StringEscape | [^"] } '"'
-//  StringEscape := '\\' (
-//      'a'
-//      | 'b'
-//      | 'f'
-//      | 'n'
-//      | 'r'
-//      | 't'
-//      | 'v'
-//      | '\\'
-//      | '"'
-//      | 'x' HexDigit HexDigit
-//      | 'u' HexDigit HexDigit HexDigit HexDigit
-//      | 'U' HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit
-//      | OctalDigit OctalDigit OctalDigit
-//      )
-//  RawString := '`' { '``' | [^`] } '`'
-//  Integer := '0' | [1-9] {[0-9]}
 type Lexer struct {
 	Precision uint
 
