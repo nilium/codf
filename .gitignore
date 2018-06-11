@@ -1,0 +1,10 @@
+.*.sw[op]
+Session.vim
+
+.DS_Store
+
+# Fuzzing
+*-fuzz.zip
+corpus/
+crashers/
+suppressed/
