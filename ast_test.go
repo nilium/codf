@@ -1,6 +1,9 @@
 package codf
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestFloat64Conversion(t *testing.T) {
 	wants := mkexprs(
@@ -62,5 +65,59 @@ func TestInt64Conversion(t *testing.T) {
 		if goti != want {
 			t.Fatalf("got = %d (%016x); want %d (%016x)", goti, goti, want, want)
 		}
+	}
+}
+
+func TestEach(t *testing.T) {
+	doc := mustParse(t, `
+	foo 1;
+	foo 1 2;
+	foo 1 2 3;
+	`)
+
+	Each(doc, func(i int, n Node) error {
+		if doc.Children[i] != n {
+			t.Fatalf("unexpected node for index %d = %#+v; want child[%d] = %#+v", i, n, i, doc.Children[i])
+		}
+		return nil
+	})
+
+	foo2 := doc.Children[1].(*Statement)
+	Each(foo2, func(i int, n Node) error {
+		if foo2.Params[i] != n {
+			t.Fatalf("unexpected node for index %d = %#+v; want param[%d] = %#+v", i, n, i, foo2.Params[i])
+		}
+		return nil
+	})
+}
+
+func TestSelect(t *testing.T) {
+	doc := mustParse(t, `
+	foo 9;
+	bar 1;
+	foo 8 7;
+	bar 2 3;
+	foo 6 5 4;
+	bar 4 5 6;
+	`)
+
+	// Select half
+	want := []Node{
+		doc.Children[0],
+		doc.Children[2],
+		doc.Children[4],
+	}
+	got := Select(doc, "foo")
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Select(foo) = %#+v; want %#+v", got, want)
+	}
+
+	// Select all
+	want = doc.Children
+	got = Select(doc, "foo", "bar")
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Select(foo) = %#+v; want %#+v", got, want)
 	}
 }

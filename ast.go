@@ -19,7 +19,8 @@ type Node interface {
 // Each iterates over each child or parameter of the base node and passes its index and the Node to
 // fn. If fn returns an error, it breaks and returns the error.
 //
-// Each does not recursively iterate over nodes.
+// Each does not recursively iterate over nodes. If passed a Section or Document, it will iterate
+// over child nodes. If passed a Statement, it'll iterate over the statement's parameters.
 func Each(base Node, fn func(int, Node) error) error {
 	switch base := base.(type) {
 	case ParentNode:
