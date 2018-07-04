@@ -8,45 +8,25 @@ import (
 	"time"
 )
 
-// parseNode is any Node that can be used in parsing as a context.
-type parseNode interface {
-	// astparse is an empty function used to identify a parseNode.
-	astparse()
-}
-
-// parentNode is any parseNode that accepts nodes as children during parsing.
-type parentNode interface {
-	parseNode
-	addChild(node Node)
-}
-
-// Document is the root of a codf document -- it is functionally similar to a Section, but is
-// unnamed and has no parameters.
-type Document struct {
-	Children []Node // Sections and Statements that make up the Document.
-}
-
-func (d *Document) String() string {
-	strs := make([]string, len(d.Children))
-	for i, n := range d.Children {
-		strs[i] = n.format("")
-	}
-	return strings.Join(strs, "\n")
-}
-
-// addChild adds a section or statement to the Document's children.
-func (d *Document) addChild(node Node) {
-	d.Children = append(d.Children, node)
-}
-
-func (*Document) astparse() {}
-
 // Node is any parsed element of a codf document. This includes the Section, Statement, Literal,
 // Array, Map, and other types.
 type Node interface {
 	Token() Token
 	astnode()
 	format(prefix string) string
+}
+
+// ParentNode is a node that has sub-nodes.
+type ParentNode interface {
+	Node
+	Nodes() []Node
+}
+
+// ParamNode is a node that has ExprNode parameters.
+type ParamNode interface {
+	Node
+	Name() string
+	Parameters() []ExprNode
 }
 
 // segmentNode is any section- or statement-like parseNode that accepts parameters (values). This
@@ -63,12 +43,69 @@ type ExprNode interface {
 	Value() interface{}
 }
 
+// parseNode is any Node that can be used in parsing as a context.
+type parseNode interface {
+	// astparse is an empty function used to identify a parseNode.
+	astparse()
+}
+
+// parentNode is any parseNode that accepts nodes as children during parsing.
+type parentNode interface {
+	parseNode
+	addChild(node Node)
+}
+
+// Document is the root of a codf document -- it is functionally similar to a Section, has no
+// parameters.
+type Document struct {
+	// Name is usually a filename assigned by the user. It is not assigned by a parser and is
+	// just metadata on the Document.
+	Name     string
+	Children []Node // Sections and Statements that make up the Document.
+}
+
+func (*Document) astnode() {}
+
+// Nodes returns the child nodes of the document.
+func (d *Document) Nodes() []Node {
+	return d.Children
+}
+
+// Token returns an empty token, as documents are the root node and only contain other nodes.
+func (*Document) Token() Token {
+	return noToken
+}
+
+func (d *Document) String() string {
+	return d.format("")
+}
+
+func (d *Document) format(prefix string) string {
+	strs := make([]string, len(d.Children))
+	for i, n := range d.Children {
+		strs[i] = n.format("")
+	}
+	return prefix + strings.Join(strs, "\n"+prefix)
+}
+
+// addChild adds a section or statement to the Document's children.
+func (d *Document) addChild(node Node) {
+	d.Children = append(d.Children, node)
+}
+
+func (*Document) astparse() {}
+
 // Statement is any single word followed by an optional set of ExprNodes for parameters.
 type Statement struct {
 	NameTok *Literal
 	Params  []ExprNode
 
 	EndTok Token
+}
+
+// Parameters returns the parameters the statement holds.
+func (s *Statement) Parameters() []ExprNode {
+	return s.Params
 }
 
 func (s *Statement) String() string {
@@ -124,6 +161,16 @@ type Section struct {
 
 	StartTok Token
 	EndTok   Token
+}
+
+// Nodes returns the child nodes of the section.
+func (s *Section) Nodes() []Node {
+	return s.Children
+}
+
+// Parameters returns the parameters the section holds.
+func (s *Section) Parameters() []ExprNode {
+	return s.Params
 }
 
 func (s *Section) String() string {
@@ -364,9 +411,25 @@ func Bool(node Node) (v, ok bool) {
 }
 
 // String returns the value held by node as a string and true.
-// If the node doesn't hold a string, it returns the empty string and false.
+// If the node doesn't hold a string or word, it returns the empty string and false.
 func String(node Node) (str string, ok bool) {
 	str, ok = Value(node).(string)
+	return
+}
+
+// Quote returns the string value of node if and only if node is a quoted string.
+func Quote(node Node) (str string, ok bool) {
+	if lit, isLit := node.(*Literal); isLit && (lit.Tok.Kind == TString || lit.Tok.Kind == TRawString) {
+		str, ok = lit.Value().(string)
+	}
+	return
+}
+
+// Word returns the string value of node if and only if node is a word.
+func Word(node Node) (str string, ok bool) {
+	if lit, isLit := node.(*Literal); isLit && lit.Tok.Kind == TWord {
+		str, ok = lit.Value().(string)
+	}
 	return
 }
 

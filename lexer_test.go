@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// logf is a pointer to the current test's Logf function.
-// Only used for debugging.
-var logf = func(string, ...interface{}) {}
-
 func TestInvalidTokenName(t *testing.T) {
 	const want = "invalid"
 	const tok32 = TokenKind(0xffffffff)
@@ -843,10 +839,4 @@ func TestDurations(t *testing.T) {
 			seq.Run(t, c)
 		})
 	}
-}
-
-func setlogf(t *testing.T) func() {
-	fn := logf
-	logf = t.Logf
-	return func() { logf = fn }
 }

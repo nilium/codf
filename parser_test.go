@@ -25,6 +25,12 @@ func mustParse(t *testing.T, in string) *Document {
 	return doc
 }
 
+func mustParseNamed(t *testing.T, name string, in string) *Document {
+	doc := mustParse(t, in)
+	doc.Name = name
+	return doc
+}
+
 func mustNotParse(t *testing.T, in string) *Document {
 	doc, err := parse(in)
 	if err == nil {
