@@ -240,14 +240,19 @@ func TestWalk(t *testing.T) {
 	})
 }
 
-type walkDeleteNested struct{}
+type walkDeleteNested struct {
+	statements []string
+}
 
-func (w *walkDeleteNested) Statement(*Statement) error {
+func (w *walkDeleteNested) Statement(s *Statement) error {
+	w.statements = append(w.statements, s.Name())
 	return nil
 }
+
 func (w *walkDeleteNested) EnterSection(s *Section) (Walker, error) {
 	return nil, fmt.Errorf("encountered section %s", s.Name())
 }
+
 func (w *walkDeleteNested) Map(n Node) (Node, error) {
 	switch n.(type) {
 	case *Section:
@@ -286,14 +291,25 @@ func TestWalkMapper(t *testing.T) {
 	t.Logf("-- BEFORE --\n%v", doc)
 
 	want := []Node{doc.Children[0], doc.Children[1], doc.Children[3]}
-	err := Walk(doc, new(walkDeleteNested))
+	walker := new(walkDeleteNested)
+	err := Walk(doc, walker)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if !reflect.DeepEqual(doc.Children, want) {
-		t.Fatalf("children = %#+v; want %#+v", doc.Children, want)
+		t.Errorf("children = %#+v; want %#+v", doc.Children, want)
 	}
 	t.Logf("-- AFTER --\n%v", doc)
+
+	wantStatements := []string{
+		"user",
+		"daemon",
+		"statement",
+	}
+
+	if !reflect.DeepEqual(walker.statements, wantStatements) {
+		t.Errorf("statements = %q; want %q", walker.statements, wantStatements)
+	}
 }
