@@ -64,6 +64,33 @@ func mkexpr(arg interface{}) ExprNode {
 	panic(fmt.Errorf("unsupported type %T", arg))
 }
 
+func mkstr(s string) *Literal {
+	return &Literal{
+		Tok: Token{
+			Kind:  TString,
+			Value: s,
+		},
+	}
+}
+
+func mkrawstr(s string) *Literal {
+	return &Literal{
+		Tok: Token{
+			Kind:  TRawString,
+			Value: s,
+		},
+	}
+}
+
+func mkword(s string) *Literal {
+	return &Literal{
+		Tok: Token{
+			Kind:  TWord,
+			Value: s,
+		},
+	}
+}
+
 func mkmap(args ...interface{}) *Map {
 	if len(args)%2 == 1 {
 		panic("mkmap must receive arguments in pairs of (string, value); got valueless key")

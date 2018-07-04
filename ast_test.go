@@ -2,6 +2,56 @@ package codf
 
 import "testing"
 
+func TestStringConversion(t *testing.T) {
+	exprs := mkexprs(
+		mkstr("quoted"),
+		mkrawstr("raw quoted"),
+		mkword("word-string"),
+		mkdec("4.1234"),
+		mkexpr(1234),
+		mkrat(1, 2),
+	)
+
+	check := func(t *testing.T, convert func(Node) (string, bool), expected ...bool) {
+		for i, wantOK := range expected {
+			ex := exprs[i]
+			got, ok := convert(ex)
+			if ok != wantOK {
+				t.Errorf("%d: converting %v returned %t; want %t", i, ex, ok, wantOK)
+				continue
+			} else if !ok {
+				continue
+			}
+
+			want := ex.(*Literal).Value().(string)
+			if got != want {
+				t.Errorf("%d: converting %v returned %q; want %q", i, ex, got, want)
+			}
+		}
+	}
+
+	t.Run("String", func(t *testing.T) {
+		check(t, String,
+			true, true, true,
+			false, false, false,
+		)
+	})
+
+	t.Run("Quote", func(t *testing.T) {
+		check(t, Quote,
+			true, true, false,
+			false, false, false,
+		)
+	})
+
+	t.Run("Word", func(t *testing.T) {
+		check(t, Word,
+			false, false, true,
+			false, false, false,
+		)
+	})
+}
+
 func TestFloat64Conversion(t *testing.T) {
 	wants := mkexprs(
 		mkdec("0.25"),

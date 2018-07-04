@@ -55,9 +55,12 @@ type parentNode interface {
 	addChild(node Node)
 }
 
-// Document is the root of a codf document -- it is functionally similar to a Section, but is
-// unnamed and has no parameters.
+// Document is the root of a codf document -- it is functionally similar to a Section, has no
+// parameters.
 type Document struct {
+	// Name is usually a filename assigned by the user. It is not assigned by a parser and is
+	// just metadata on the Document.
+	Name     string
 	Children []Node // Sections and Statements that make up the Document.
 }
 
@@ -408,9 +411,25 @@ func Bool(node Node) (v, ok bool) {
 }
 
 // String returns the value held by node as a string and true.
-// If the node doesn't hold a string, it returns the empty string and false.
+// If the node doesn't hold a string or word, it returns the empty string and false.
 func String(node Node) (str string, ok bool) {
 	str, ok = Value(node).(string)
+	return
+}
+
+// Quote returns the string value of node if and only if node is a quoted string.
+func Quote(node Node) (str string, ok bool) {
+	if lit, isLit := node.(*Literal); isLit && (lit.Tok.Kind == TString || lit.Tok.Kind == TRawString) {
+		str, ok = lit.Value().(string)
+	}
+	return
+}
+
+// Word returns the string value of node if and only if node is a word.
+func Word(node Node) (str string, ok bool) {
+	if lit, isLit := node.(*Literal); isLit && lit.Tok.Kind == TWord {
+		str, ok = lit.Value().(string)
+	}
 	return
 }
 
