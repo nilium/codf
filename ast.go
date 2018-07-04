@@ -63,6 +63,7 @@ type Document struct {
 
 func (*Document) astnode() {}
 
+// Nodes returns the child nodes of the document.
 func (d *Document) Nodes() []Node {
 	return d.Children
 }
@@ -99,6 +100,7 @@ type Statement struct {
 	EndTok Token
 }
 
+// Parameters returns the parameters the statement holds.
 func (s *Statement) Parameters() []ExprNode {
 	return s.Params
 }
@@ -158,10 +160,12 @@ type Section struct {
 	EndTok   Token
 }
 
+// Nodes returns the child nodes of the section.
 func (s *Section) Nodes() []Node {
 	return s.Children
 }
 
+// Parameters returns the parameters the section holds.
 func (s *Section) Parameters() []ExprNode {
 	return s.Params
 }
