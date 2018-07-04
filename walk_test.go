@@ -2,6 +2,7 @@ package codf
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 )
 
@@ -237,4 +238,62 @@ func TestWalk(t *testing.T) {
 		err := Walk(doc, def)
 		checkStatementErr(t, err, "include_nested.conf", "cache_proxy")
 	})
+}
+
+type walkDeleteNested struct{}
+
+func (w *walkDeleteNested) Statement(*Statement) error {
+	return nil
+}
+func (w *walkDeleteNested) EnterSection(s *Section) (Walker, error) {
+	return nil, fmt.Errorf("encountered section %s", s.Name())
+}
+func (w *walkDeleteNested) Map(n Node) (Node, error) {
+	switch n.(type) {
+	case *Section:
+		return nil, nil
+	}
+	return n, nil
+}
+
+func TestWalkMapper(t *testing.T) {
+	defer setlogf(t)()
+	const DocSource = `
+	user http;
+	daemon no;
+
+	http {
+		server {
+			server_name go.spiff.io;
+			listen 80;
+			listen 443 http2 ssl;
+
+			location / {
+				root /var/www/public;
+				index index.html index.htm;
+			}
+		}
+
+		sendfile yes;
+		keepalive_timeout 65s;
+	}
+	`
+	doc := mustParseNamed(t, "root.conf", DocSource)
+	doc.addChild(mustParseNamed(t, "child.conf", `
+		sub-section {}
+		statement true;
+	`))
+	t.Logf("-- BEFORE --\n%v", doc)
+
+	want := []Node{doc.Children[0], doc.Children[1], doc.Children[3]}
+	err := Walk(doc, new(walkDeleteNested))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(doc.Children, want) {
+		t.Fatalf("children = %#+v; want %#+v", doc.Children, want)
+	}
+	t.Logf("-- AFTER --\n%v", doc)
 }

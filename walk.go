@@ -12,6 +12,15 @@ type Walker interface {
 	EnterSection(*Section) (Walker, error)
 }
 
+// WalkMapper is an optional interface implemented for a Walker to have Walk replace the node passed
+// to Map with the returned Node. If Map returns a nil node without an error, the mapped node is
+// removed from its parent.
+type WalkMapper interface {
+	Walker
+
+	Map(node Node) (Node, error)
+}
+
 // WalkExiter is an optional interface implemented for a Walker to have Walk call ExitSection when
 // it has finished consuming all children in a section.
 type WalkExiter interface {
@@ -38,7 +47,32 @@ func Walk(parent ParentNode, walker Walker) (err error) {
 }
 
 func walkInContext(context, parent ParentNode, walker Walker) (err error) {
-	for _, child := range parent.Nodes() {
+	children := parent.Nodes()
+
+	mapper, _ := walker.(WalkMapper)
+
+	for i := 0; i < len(children); i++ {
+		child := children[i]
+
+		// Remap the child node if the walker implemented WalkMapper
+		if mapper != nil {
+			child, err = mapper.Map(child)
+			if err != nil {
+				return walkErr(parent, context, child, err)
+			}
+
+			// If the new child is nil, remove it from the slice of children
+			if child == nil {
+				copy(children[i:], children[i+1:])
+				children[len(children)-1] = nil
+				children = children[:len(children)-1]
+				// Now that the next child is in this child's place, walk i back one cell
+				i--
+				continue
+			}
+			children[i] = child
+		}
+
 		switch child := child.(type) {
 		case *Statement:
 			// Statements are passed verbatim as directives
@@ -61,11 +95,23 @@ func walkInContext(context, parent ParentNode, walker Walker) (err error) {
 
 		case *Document:
 			err = walkInContext(context, child, walker)
+
+		default:
+			err = fmt.Errorf("unrecognized node type %T", child)
 		}
+
 		if err != nil {
 			return walkErr(parent, context, child, err)
 		}
 	}
+
+	switch parent := parent.(type) {
+	case *Document:
+		parent.Children = children
+	case *Section:
+		parent.Children = children
+	}
+
 	return nil
 }
 
