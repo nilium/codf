@@ -34,10 +34,11 @@ type WalkExiter interface {
 // Walk will return a *WalkError if any error occurs during a walk. The WalkError will contain both
 // the parent and child node that the error occurred for.
 func Walk(parent ParentNode, walker Walker) (err error) {
-	children := append([]Node(nil), parent.Nodes()...)
-reset:
-	for i := 0; i < len(children); i++ {
-		child := children[i]
+	return walkInContext(parent, parent, walker)
+}
+
+func walkInContext(context, parent ParentNode, walker Walker) (err error) {
+	for _, child := range parent.Nodes() {
 		switch child := child.(type) {
 		case *Statement:
 			// Statements are passed verbatim as directives
@@ -51,44 +52,28 @@ reset:
 			if sub, err = walker.EnterSection(child); err != nil || sub == nil {
 				break
 			}
-			if err = Walk(child, sub); err != nil {
+			if err = walkInContext(child, child, sub); err != nil {
 				break
 			}
-			err = exitWalker(sub, walker, child, parent)
+			if ex, ok := sub.(WalkExiter); ok {
+				err = ex.ExitSection(walker, child, parent)
+			}
 
 		case *Document:
-			// Merge a non-empty document's children with the current set of children,
-			// discarding children already seen.
-			docNodes := child.Nodes()
-			if n := len(docNodes); n == 0 {
-				continue
-			} else if n < i+1 {
-				children = append(append(children[:0], docNodes...), children[i+1:]...)
-			} else {
-				tail := children[i+1:]
-				children = make([]Node, 0, len(tail)+n)
-				children = append(append(children, docNodes...), tail...)
-			}
-			goto reset
+			err = walkInContext(context, child, walker)
 		}
-
 		if err != nil {
-			return walkErr(parent, child, err)
+			return walkErr(parent, context, child, err)
 		}
 	}
 	return nil
 }
 
-func exitWalker(walker Walker, next Walker, section *Section, parent ParentNode) error {
-	ex, ok := walker.(WalkExiter)
-	if !ok {
-		return nil
-	}
-	return ex.ExitSection(next, section, parent)
-}
-
 // WalkError is an error returned by Walk if an error occurs during a Walk call.
 type WalkError struct {
+	// Document is the document the context and node were found in, if the Walk root was
+	// a document.
+	Document *Document
 	// Context is the ParentNode that Node is a child of.
 	Context ParentNode
 	// Node is the node that was encountered when the error occurred.
@@ -97,20 +82,30 @@ type WalkError struct {
 	Err error
 }
 
-func walkErr(ctx ParentNode, node Node, err error) *WalkError {
+func walkErr(owner ParentNode, ctx ParentNode, node Node, err error) *WalkError {
 	if we, ok := err.(*WalkError); ok {
+		if we.Document != nil {
+		} else if doc, ok := owner.(*Document); ok {
+			we.Document = doc
+		}
 		return we
 	}
+	doc, _ := owner.(*Document)
 	return &WalkError{
-		Context: ctx,
-		Node:    node,
-		Err:     err,
+		Document: doc,
+		Context:  ctx,
+		Node:     node,
+		Err:      err,
 	}
 }
 
 func (e *WalkError) Error() string {
-	return "[" + e.Node.Token().Start.String() + "] " +
-		contextName(e.Node) + " in " + contextName(e.Context) + ": " + e.Err.Error()
+	prefix := "[" + e.Node.Token().Start.String() + "] "
+	suffix := contextName(e.Node) + " in " + contextName(e.Context) + ": " + e.Err.Error()
+	if e.Document != nil && e.Document.Name != "" {
+		return prefix + e.Document.Name + ": " + suffix
+	}
+	return prefix + suffix
 }
 
 func contextName(node Node) string {

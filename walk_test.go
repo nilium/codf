@@ -12,7 +12,6 @@ type docWalker struct {
 }
 
 func (d *docWalker) Statement(stmt *Statement) error {
-	logf("STATEMENT: %v", stmt)
 	if _, ok := d.statements[stmt.Name()]; !ok {
 		return fmt.Errorf("invalid statement: %s", stmt.Name())
 	}
@@ -20,7 +19,6 @@ func (d *docWalker) Statement(stmt *Statement) error {
 }
 
 func (d *docWalker) EnterSection(sec *Section) (Walker, error) {
-	logf("ENTER: %v", sec.Name())
 	if sub := d.sections[sec.Name()]; sub != nil {
 		return sub, nil
 	}
@@ -28,7 +26,6 @@ func (d *docWalker) EnterSection(sec *Section) (Walker, error) {
 }
 
 func (d *docWalker) ExitSection(_ Walker, sec *Section, parent ParentNode) error {
-	logf("EXIT: %v", sec.Name())
 	if sec.Name() != d.name {
 		return fmt.Errorf("ExitSection called with invalid section named %s", sec.Name())
 	}
@@ -77,12 +74,9 @@ func TestWalk(t *testing.T) {
 		keepalive_timeout 65s;
 	}
 	`
-	doc := mustParse(t, DocSource)
-	doc.addChild(mustParse(t, ``))
-	doc.addChild(mustParse(t, `
-		worker_processes auto;
-	`))
-	doc.addChild(mustParse(t, `
+	doc := mustParseNamed(t, "root.conf", DocSource)
+	doc.addChild(mustParseNamed(t, "empty.conf", ``))
+	doc.addChild(mustParseNamed(t, "include_root.conf", `
 		worker_processes 1;
 		user httpd;
 		user www-data;
@@ -90,6 +84,12 @@ func TestWalk(t *testing.T) {
 		daemon yes;
 		daemon true;
 		daemon false;
+	`))
+	doc.Nodes()[2].(*Section).addChild(mustParseNamed(t, "include_nested.conf", `
+		sendfile no;
+		keepalive_timeout 10s;
+		cache /var/run/sv/cache 3;
+		cache_proxy [200 301 302 404] 5m; ' defaults to cache_proxy [] 0
 	`))
 
 	t.Run("Valid", func(t *testing.T) {
@@ -101,6 +101,8 @@ func TestWalk(t *testing.T) {
 			sectionWalker("http",
 				"sendfile",
 				"keepalive_timeout",
+				"cache",
+				"cache_proxy",
 
 				sectionWalker("server",
 					"server_name",
@@ -136,6 +138,28 @@ func TestWalk(t *testing.T) {
 		}
 	})
 
+	checkStatementErr := func(t *testing.T, err error, wantDoc string, wantName string) {
+		fail := func() {
+			t.Fatalf("expected error on %s statement; got %v", wantName, err)
+		}
+		we, ok := err.(*WalkError)
+		if !ok {
+			fail()
+		}
+		if stmt, ok := we.Node.(*Statement); !ok || stmt.Name() != wantName {
+			fail()
+		}
+		t.Log(err)
+
+		docName := ""
+		if we.Document != nil {
+			docName = we.Document.Name
+		}
+		if docName != wantDoc {
+			t.Errorf("expected error in document %q; got %q", wantDoc, docName)
+		}
+	}
+
 	t.Run("InvalidNestedStatement", func(t *testing.T) {
 		defer setlogf(t)()
 		def := sectionWalker("main",
@@ -144,6 +168,8 @@ func TestWalk(t *testing.T) {
 			"worker_processes",
 			sectionWalker("http",
 				"sendfile",
+				"cache",
+				"cache_proxy",
 
 				sectionWalker("server",
 					"server_name",
@@ -156,14 +182,11 @@ func TestWalk(t *testing.T) {
 			),
 		)
 
-		if err := Walk(doc, def); err == nil {
-			t.Fatal("expected error on keepalive_timeout statement")
-		} else {
-			t.Log(err)
-		}
+		err := Walk(doc, def)
+		checkStatementErr(t, err, "root.conf", "keepalive_timeout")
 	})
 
-	t.Run("InvalidNestedDocument", func(t *testing.T) {
+	t.Run("InvalidNestedDocumentInDocument", func(t *testing.T) {
 		defer setlogf(t)()
 		def := sectionWalker("main",
 			"user",
@@ -171,6 +194,8 @@ func TestWalk(t *testing.T) {
 			sectionWalker("http",
 				"sendfile",
 				"keepalive_timeout",
+				"cache",
+				"cache_proxy",
 
 				sectionWalker("server",
 					"server_name",
@@ -183,10 +208,33 @@ func TestWalk(t *testing.T) {
 			),
 		)
 
-		if err := Walk(doc, def); err == nil {
-			t.Fatal("expected error on worker_processes statement")
-		} else {
-			t.Log(err)
-		}
+		err := Walk(doc, def)
+		checkStatementErr(t, err, "include_root.conf", "worker_processes")
+	})
+
+	t.Run("InvalidNestedDocumentInSection", func(t *testing.T) {
+		defer setlogf(t)()
+		def := sectionWalker("main",
+			"user",
+			"daemon",
+			"worker_processes",
+			sectionWalker("http",
+				"sendfile",
+				"keepalive_timeout",
+				"cache",
+
+				sectionWalker("server",
+					"server_name",
+					"listen",
+					sectionWalker("location",
+						"root",
+						"index",
+					),
+				),
+			),
+		)
+
+		err := Walk(doc, def)
+		checkStatementErr(t, err, "include_nested.conf", "cache_proxy")
 	})
 }
