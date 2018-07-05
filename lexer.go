@@ -96,7 +96,9 @@ var tokenNames = []string{
 
 	TMapOpen: "map",
 	TRegexp:  "regexp",
-	TString:  "string",
+
+	TString:    "string",
+	TRawString: "raw string",
 
 	TBoolean: "bool",
 
