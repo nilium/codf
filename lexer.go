@@ -88,13 +88,13 @@ var tokenNames = []string{
 
 	TWord: "word",
 
-	TSemicolon:    ";",
-	TCurlOpen:     "{",
-	TCurlClose:    "}",
-	TBracketOpen:  "[",
-	TBracketClose: "]",
+	TSemicolon:    "semicolon",
+	TCurlOpen:     "open brace",
+	TCurlClose:    "close brace",
+	TBracketOpen:  "open bracket",
+	TBracketClose: "close bracket",
 
-	TMapOpen: "#{",
+	TMapOpen: "map",
 	TRegexp:  "regexp",
 	TString:  "string",
 
@@ -102,10 +102,10 @@ var tokenNames = []string{
 
 	TInteger:  "integer",
 	TFloat:    "float",
-	THex:      "hex",
-	TOctal:    "octal",
-	TBinary:   "binary",
-	TBaseInt:  "baseint",
+	THex:      "hex integer",
+	TOctal:    "octal integer",
+	TBinary:   "binary integer",
+	TBaseInt:  "base integer",
 	TDuration: "duration",
 	TRational: "rational",
 }
