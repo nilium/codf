@@ -91,9 +91,7 @@ func (p *Parser) Parse(tr TokenReader) (err error) {
 // If an error occurs during parsing, it has no effect on the behavior of subsequent Parse or
 // ParseExpr calls. Errors returned by Parse do not affect ParseExpr.
 func (p *Parser) ParseExpr(tr TokenReader) (ExprNode, error) {
-	defer func(ctx []parseNode, perr error, pred tokenConsumer) {
-		p.ctx, p.parseErr, p.next = ctx, perr, pred
-	}(p.ctx, p.parseErr, p.next)
+	defer p.snap()()
 	exp := exprParser{}
 	p.ctx = []parseNode{&exp}
 	p.parseErr = nil
@@ -102,6 +100,19 @@ func (p *Parser) ParseExpr(tr TokenReader) (ExprNode, error) {
 		return nil, err
 	}
 	return exp.expr, nil
+}
+
+func (p *Parser) snap() func() {
+	pst := *p
+	ctx := append(make([]parseNode, len(pst.ctx)), pst.ctx...)
+	return func() {
+		*p = pst
+		for i := range p.ctx {
+			p.ctx[i] = nil
+		}
+		copy(p._ctx[:], pst._ctx[:])
+		p.ctx = append(p.ctx[:0], ctx...)
+	}
 }
 
 // Document returns the document constructed by Parser.

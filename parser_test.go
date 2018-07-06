@@ -1,6 +1,7 @@
 package codf // import "go.spiff.io/codf"
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -384,6 +385,11 @@ func TestParseExpr(t *testing.T) {
 	}
 
 	parser := NewParser()
+	init := *parser
+	init.doc = &Document{
+		Children: []Node{},
+	}
+
 	for _, c := range cases {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
@@ -397,4 +403,11 @@ func TestParseExpr(t *testing.T) {
 			objectsEqual(t, "", got, c.want)
 		})
 	}
+
+	t.Run("EnsureParserUnchanged", func(t *testing.T) {
+		objectsEqual(t, "", init.doc, parser.doc)
+		if !reflect.DeepEqual(parser, &init) {
+			t.Fatalf("parser state changed\ngot\t%#+ v\nwant\t%#+ v", parser, &init)
+		}
+	})
 }
