@@ -1,6 +1,7 @@
 package codf // import "go.spiff.io/codf"
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -84,6 +85,25 @@ func (p *Parser) Parse(tr TokenReader) (err error) {
 	return nil
 }
 
+// ParseExpr consumes tokens from a TokenReader and constructs a single ExprNode from its tokens.
+// It returns an error if no ExprNode is produced or if it would parse more than one ExprNode.
+//
+// If an error occurs during parsing, it has no effect on the behavior of subsequent Parse or
+// ParseExpr calls. Errors returned by Parse do not affect ParseExpr.
+func (p *Parser) ParseExpr(tr TokenReader) (ExprNode, error) {
+	defer func(ctx []parseNode, perr error, pred tokenConsumer) {
+		p.ctx, p.parseErr, p.next = ctx, perr, pred
+	}(p.ctx, p.parseErr, p.next)
+	exp := exprParser{}
+	p.ctx = []parseNode{&exp}
+	p.parseErr = nil
+	p.next = skipWhitespace(p.parseStatement)
+	if err := p.Parse(tr); err != nil {
+		return nil, err
+	}
+	return exp.expr, nil
+}
+
 // Document returns the document constructed by Parser.
 // Each call to Parse() modifies the Document, so it is unsafe to use the Document from multiple
 // goroutines during parsing.
@@ -127,6 +147,13 @@ func (p *Parser) context() parseNode {
 
 func (p *Parser) closeError(tok Token) error {
 	switch ctx := p.context().(type) {
+	case *exprParser:
+		if ctx.expr == nil {
+			return unexpected(tok, "expected literal")
+		} else if tok.Kind != TEOF {
+			return unexpected(tok, "expected end of text")
+		}
+		return nil
 	case *Statement:
 		return unexpected(tok, "expected end of statement %q beginning at %v",
 			ctx.Name(), ctx.Token().Start)
@@ -355,6 +382,22 @@ func (m *mapBuilder) addExpr(expr ExprNode) error {
 	m.k = nil
 	m.ord++
 
+	return nil
+}
+
+var ErrTooManyExprs = errors.New("too many expresssions")
+
+type exprParser struct {
+	expr ExprNode
+}
+
+func (*exprParser) astparse() {}
+
+func (e *exprParser) addExpr(expr ExprNode) error {
+	if e.expr != nil {
+		return ErrTooManyExprs
+	}
+	e.expr = expr
 	return nil
 }
 

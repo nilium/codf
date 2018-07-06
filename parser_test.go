@@ -236,3 +236,115 @@ func TestParseEmpty(t *testing.T) {
 		)
 	})
 }
+
+func TestParseExpr(t *testing.T) {
+	type testCase struct {
+		name    string
+		in      string
+		want    ExprNode
+		wantErr bool
+	}
+
+	cases := []testCase{
+		{
+			name: "QuotedString",
+			in:   `  "quoted string"  ' comment ' `,
+			want: mkexpr("quoted string"),
+		},
+		{
+			name: "Raw String",
+			in:   "  `raw string`  ' comment '",
+			want: mkexpr("raw string"),
+		},
+		{
+			name: "Yes",
+			in:   "yes",
+			want: mkexpr(true),
+		},
+		{
+			name: "No",
+			in:   "no",
+			want: mkexpr(false),
+		},
+		{
+			name: "True",
+			in:   "TRUE",
+			want: mkexpr(true),
+		},
+		{
+			name: "False",
+			in:   "FALSE",
+			want: mkexpr(false),
+		},
+		{
+			name: "EmptyArray",
+			in:   "[]",
+			want: mkexpr([]ExprNode{}),
+		},
+		{
+			name: "Array",
+			in:   "\n[ 1 2 3 ]\n",
+			want: mkexpr(mkexprs(1, 2, 3)),
+		},
+		{
+			name: "Map",
+			in:   "#{ foo 5 }",
+			want: mkmap("foo", 5),
+		},
+		{
+			name:    "Semicolon",
+			in:      "1;",
+			wantErr: true,
+		},
+		{
+			name:    "MapDoubleClose",
+			in:      "#{ foo 5 }}",
+			wantErr: true,
+		},
+		{
+			name:    "ArrayDoubleClose",
+			in:      "[1 2 3]]",
+			wantErr: true,
+		},
+		{
+			name:    "MultipleLiterals",
+			in:      "1\n2\n3\n",
+			wantErr: true,
+		},
+		{
+			name:    "Empty",
+			in:      "",
+			wantErr: true,
+		},
+		{
+			name:    "Whitespace",
+			in:      "  \n  ",
+			wantErr: true,
+		},
+		{
+			name:    "SpaceComment",
+			in:      "  \n  ' foobar\n   'bar\n\n\t\n",
+			wantErr: true,
+		},
+		{
+			name:    "Comment",
+			in:      "' comment",
+			wantErr: true,
+		},
+	}
+
+	parser := NewParser()
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			lexer := NewLexer(strings.NewReader(c.in))
+			got, err := parser.ParseExpr(lexer)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("error parsing %q; expected err = %t; got %v", c.in, c.wantErr, err)
+			} else if c.wantErr {
+				return
+			}
+			objectsEqual(t, "", got, c.want)
+		})
+	}
+}
