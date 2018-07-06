@@ -948,6 +948,7 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	// Occurs after '0' was lexed as the initial digit of a number.
 	//
 	// Sep          -> Integer
+	// EOF          -> Integer
 	// [0-7]        -> lex octal
 	// '/'          -> lex rational
 	// [Bb]         -> lex binary
@@ -957,7 +958,7 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	// BarewordRune -> lex bareword
 	//
 	switch {
-	case isStatementSep(r):
+	case isStatementSep(r), r == -1:
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
 		return tok, l.lexSegment, err
@@ -992,6 +993,7 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	// Occurs after [1-9] was lexed as the initial digit of a number.
 	//
 	// Sep          -> Integer
+	// EOF          -> Integer
 	// [0-9]        -> repeat
 	// IntervalUnit -> lex interval
 	// '#'          -> lex base number (base '#' {base-digit})
@@ -1001,7 +1003,7 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	// BarewordRune -> lex bareword
 	//
 	switch {
-	case isStatementSep(r):
+	case isStatementSep(r), r == eof:
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
 		return tok, l.lexSegment, err

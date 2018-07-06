@@ -257,6 +257,56 @@ func TestParseExpr(t *testing.T) {
 			want: mkexpr("raw string"),
 		},
 		{
+			name: "Positive Digit",
+			in:   "5",
+			want: mkexpr(5),
+		},
+		{
+			name: "Positive Int",
+			in:   "123",
+			want: mkexpr(123),
+		},
+		{
+			name: "Negative Digit",
+			in:   "-1",
+			want: mkexpr(-1),
+		},
+		{
+			name: "Negative Int",
+			in:   "-123",
+			want: mkexpr(-123),
+		},
+		{
+			name: "Zero",
+			in:   "0",
+			want: mkexpr(0),
+		},
+		{
+			name: "Float Zero",
+			in:   "0.0",
+			want: mkdec("0.0"),
+		},
+		{
+			name: "Float Positive",
+			in:   "+1.234",
+			want: mkdec("1.234"),
+		},
+		{
+			name: "Float Negative",
+			in:   "-1.234",
+			want: mkdec("-1.234"),
+		},
+		{
+			name: "Float Negative Exp",
+			in:   "-1.234e2",
+			want: mkdec("-123.4"),
+		},
+		{
+			name: "Float Bad Exp",
+			in:   "-1.234E",
+			want: mkword("-1.234E"),
+		},
+		{
 			name: "Yes",
 			in:   "yes",
 			want: mkexpr(true),
