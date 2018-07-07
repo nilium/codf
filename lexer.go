@@ -1,6 +1,7 @@
 package codf // import "go.spiff.io/codf"
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -144,15 +145,18 @@ type Token struct {
 
 // Location describes a location in an input byte sequence.
 type Location struct {
-	Offset int // A byte offset into an input sequence. Starts at 0.
-	Line   int // A line number, delimited by '\n'. Starts at 1.
-	Column int // A column number. Starts at 1.
+	Name   string // Name is an identifier, usually a file path, for the location.
+	Offset int    // A byte offset into an input sequence. Starts at 0.
+	Line   int    // A line number, delimited by '\n'. Starts at 1.
+	Column int    // A column number. Starts at 1.
 }
 
 func (l Location) String() string {
-	return strconv.Itoa(l.Line) +
-		":" + strconv.Itoa(l.Column) +
-		"@" + strconv.Itoa(l.Offset)
+	pos := strconv.Itoa(l.Line) + ":" + strconv.Itoa(l.Column) + ":" + strconv.Itoa(l.Offset)
+	if l.Name != "" {
+		return l.Name + ":" + pos
+	}
+	return pos
 }
 
 func (l Location) add(r rune, size int) Location {
@@ -171,13 +175,32 @@ type scanResult struct {
 	err  error
 }
 
+// NamedReader is an optional interface that an io.Reader can implement to provide a name for its
+// data source.
+type NamedReader interface {
+	io.Reader
+
+	// Name returns a non-empty string identifying the reader's data source. This may be a file,
+	// URL, resource ID, or some other thing. If the returned string is empty, it will be
+	// treated as unnamed.
+	Name() string
+}
+
 var noToken Token
 
 // Lexer takes an input sequence of runes and constructs Tokens from it.
 type Lexer struct {
+	// Precision is the precision used in *big.Float when taking the actual value of a TFloat
+	// token.
 	Precision uint
+	// Name is the name of the token source currently being lexed. It is used to identify the
+	// source of a location by name. It is not necessarily a filename, but usually is.
+	//
+	// If the scanner provided to the Lexer implements NamedScanner, the scanner's name takes
+	// priority.
+	Name string
 
-	scanner io.RuneScanner
+	scanner io.RuneReader
 
 	pending  bool
 	lastScan scanResult
@@ -193,12 +216,34 @@ type Lexer struct {
 }
 
 // NewLexer allocates a new Lexer that reads runes from r.
-func NewLexer(r io.RuneScanner) *Lexer {
+func NewLexer(r io.Reader) *Lexer {
+	rr := runeReader(r)
+
 	le := &Lexer{
-		scanner: r,
+		scanner: rr,
 		pos:     Location{Line: 1, Column: 1},
 	}
 	return le
+}
+
+type nameRuneReader struct {
+	*bufio.Reader
+	namefn func() string
+}
+
+func (n nameRuneReader) Name() string {
+	return n.namefn()
+}
+
+func runeReader(r io.Reader) io.RuneReader {
+	switch r := r.(type) {
+	case io.RuneReader:
+		return r
+	case NamedReader:
+		return nameRuneReader{bufio.NewReader(r), r.Name}
+	default:
+		return bufio.NewReader(r)
+	}
 }
 
 // ReadToken returns a token or an error. If EOF occurs, a TEOF token is returned without an error,
@@ -209,6 +254,9 @@ func (l *Lexer) ReadToken() (tok Token, err error) {
 		l.next = l.lexSegment
 	}
 
+	if l.pos == (Location{Line: 1, Column: 1}) {
+		l.pos.Name = l.posName()
+	}
 	l.startPos = l.scanPos()
 
 	var r rune
@@ -266,6 +314,7 @@ func (l *Lexer) readRune() (r rune, err error) {
 	}
 
 	var size int
+	l.pos.Name = l.posName()
 	r, size, err = l.scanner.ReadRune()
 	if err == io.EOF {
 		r, size, err = eof, 0, nil
@@ -281,6 +330,15 @@ func (l *Lexer) readRune() (r rune, err error) {
 	}
 
 	return
+}
+
+func (l *Lexer) posName() string {
+	if named, ok := l.scanner.(NamedReader); ok {
+		if name := named.Name(); name != "" {
+			return name
+		}
+	}
+	return l.Name
 }
 
 // unread takes the last-scanned rune and tells the lexer to return it on the next call to readRune.

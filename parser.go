@@ -67,7 +67,9 @@ func (p *Parser) Parse(tr TokenReader) (err error) {
 		}
 	}()
 
+	var setDocName bool
 	if p.next == nil {
+		setDocName = p.doc.Name == ""
 		p.next = p.beginSegment
 	}
 
@@ -77,6 +79,11 @@ func (p *Parser) Parse(tr TokenReader) (err error) {
 		if err != nil {
 			return err
 		}
+
+		if setDocName {
+			p.doc.Name = tok.Start.Name
+		}
+
 		if p.next, err = p.next(tok); err != nil {
 			return err
 		}

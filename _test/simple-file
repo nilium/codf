@@ -1,0 +1,8 @@
+' Start
+
+statement word;
+
+section "string" {
+}
+
+' End of file
