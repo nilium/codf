@@ -3,7 +3,9 @@ package codf // import "go.spiff.io/codf"
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/big"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +19,26 @@ func TestInvalidTokenName(t *testing.T) {
 	defer setlogf(t)()
 	if got := tok32.String(); got != want {
 		t.Errorf("Token(%08x) = %q; want %q", tok32, got, want)
+	}
+}
+
+func wordCase(word string) tokenCase {
+	return tokenCase{
+		Token: Token{
+			Kind:  TWord,
+			Raw:   []byte(word),
+			Value: word,
+		},
+	}
+}
+
+func quoteCase(str string) tokenCase {
+	return tokenCase{
+		Token: Token{
+			Kind:  TString,
+			Raw:   []byte(`"` + str + `"`),
+			Value: str,
+		},
 	}
 }
 
@@ -115,7 +137,13 @@ type tokenSeq []tokenCase
 func (seq tokenSeq) Run(t *testing.T, input string) {
 	buf := reader(input)
 	lex := NewLexer(buf)
+	lex.Name = "test.codf"
+	if seq.RunWithLexer(t, lex) {
+		requireEOF(t, buf)
+	}
+}
 
+func (seq tokenSeq) RunWithLexer(t *testing.T, lex *Lexer) bool {
 	for i, want := range seq {
 		prefix := fmt.Sprintf("%d: ", i+1)
 
@@ -127,17 +155,16 @@ func (seq tokenSeq) Run(t *testing.T, input string) {
 		}
 
 		if want.Err && err != nil {
-			return
+			return false
 		}
 
 		checkToken(t, prefix, tok, want.Token)
 
 		if t.Failed() {
-			return
+			return false
 		}
 	}
-
-	requireEOF(t, buf)
+	return true
 }
 
 type tokenSeqTest struct {
@@ -167,54 +194,54 @@ func TestBareword(t *testing.T) {
 	tokenSeq{
 		{Token: Token{
 			Kind:  TWhitespace,
-			Start: Location{Offset: 0, Line: 1, Column: 1},
-			End:   Location{Offset: 1, Line: 1, Column: 2},
+			Start: Location{Name: "test.codf", Offset: 0, Line: 1, Column: 1},
+			End:   Location{Name: "test.codf", Offset: 1, Line: 1, Column: 2},
 		}},
 		{Token: Token{
 			Kind:  TWord,
 			Raw:   []byte(".foo$bar#baz=quux"),
-			Start: Location{Offset: 1, Line: 1, Column: 2},
-			End:   Location{Offset: 18, Line: 1, Column: 19},
+			Start: Location{Name: "test.codf", Offset: 1, Line: 1, Column: 2},
+			End:   Location{Name: "test.codf", Offset: 18, Line: 1, Column: 19},
 			Value: ".foo$bar#baz=quux",
 		}},
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
 			Raw:   []byte("10.0.0.0/8"),
-			Start: Location{Offset: 20, Line: 2, Column: 2},
-			End:   Location{Offset: 30, Line: 2, Column: 12},
+			Start: Location{Name: "test.codf", Offset: 20, Line: 2, Column: 2},
+			End:   Location{Name: "test.codf", Offset: 30, Line: 2, Column: 12},
 			Value: "10.0.0.0/8",
 		}},
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
 			Raw:   []byte("#"),
-			Start: Location{Offset: 31, Line: 2, Column: 13},
-			End:   Location{Offset: 32, Line: 2, Column: 14},
+			Start: Location{Name: "test.codf", Offset: 31, Line: 2, Column: 13},
+			End:   Location{Name: "test.codf", Offset: 32, Line: 2, Column: 14},
 			Value: "#",
 		}},
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
 			Raw:   []byte("#f"),
-			Start: Location{Offset: 33, Line: 2, Column: 15},
-			End:   Location{Offset: 35, Line: 2, Column: 17},
+			Start: Location{Name: "test.codf", Offset: 33, Line: 2, Column: 15},
+			End:   Location{Name: "test.codf", Offset: 35, Line: 2, Column: 17},
 			Value: "#f",
 		}},
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
 			Raw:   []byte("+"),
-			Start: Location{Offset: 36, Line: 2, Column: 18},
-			End:   Location{Offset: 37, Line: 2, Column: 19},
+			Start: Location{Name: "test.codf", Offset: 36, Line: 2, Column: 18},
+			End:   Location{Name: "test.codf", Offset: 37, Line: 2, Column: 19},
 			Value: "+",
 		}},
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
 			Raw:   []byte("-"),
-			Start: Location{Offset: 38, Line: 2, Column: 20},
-			End:   Location{Offset: 39, Line: 2, Column: 21},
+			Start: Location{Name: "test.codf", Offset: 38, Line: 2, Column: 20},
+			End:   Location{Name: "test.codf", Offset: 39, Line: 2, Column: 21},
 			Value: "-",
 		}},
 		_semicolon,
@@ -230,8 +257,8 @@ func TestWhitespace(t *testing.T) {
 	tokenSeq{
 		{
 			Token: Token{
-				Start: Location{1, 1, 0},
-				End:   Location{Column: 3, Line: 3, Offset: 6},
+				Start: Location{Name: "test.codf", Column: 1, Line: 1, Offset: 0},
+				End:   Location{Name: "test.codf", Column: 3, Line: 3, Offset: 6},
 				Kind:  TWhitespace,
 			},
 		},
@@ -625,7 +652,10 @@ func TestRationals(t *testing.T) {
 }
 
 func TestLocationString(t *testing.T) {
-	const want = "2:34@45"
+	const (
+		want      = "2:34:45"
+		wantNamed = "Location Name:" + want
+	)
 	defer setlogf(t)()
 	loc := Location{
 		Line:   2,
@@ -634,6 +664,11 @@ func TestLocationString(t *testing.T) {
 	}
 	if got := loc.String(); got != want {
 		t.Fatalf("%#+v.String() = %q; want %q", loc, got, want)
+	}
+
+	loc.Name = "Location Name"
+	if got := loc.String(); got != wantNamed {
+		t.Fatalf("%#+v.String() = %q; want %q", loc, got, wantNamed)
 	}
 }
 
@@ -839,4 +874,55 @@ func TestDurations(t *testing.T) {
 			seq.Run(t, c)
 		})
 	}
+}
+
+func TestReaderWrapping(t *testing.T) {
+	const path = "_test/simple-file"
+	const noname = "no-name"
+
+	t.Run("File", func(t *testing.T) {
+		fi, err := os.Open(path)
+		if err != nil {
+			t.Skipf("Cannot open test file; skipping: %v", err)
+		}
+		defer fi.Close()
+
+		lexer := NewLexer(fi)
+		lexer.Name = noname
+
+		tokenSeq{
+			_comment, _ws,
+			wordCase("statement"), _ws, wordCase("word"), _semicolon, _ws,
+			wordCase("section"), _ws, quoteCase("string"), _ws, _curlopen, _ws,
+			_curlclose, _ws,
+			_comment,
+		}.RunWithLexer(t, lexer)
+
+		if lexer.pos.Name != path {
+			t.Fatalf("lexer.pos.Name = %q; want %q", lexer.pos.Name, path)
+		}
+	})
+
+	t.Run("SimpleReader", func(t *testing.T) {
+		fi, err := os.Open(path)
+		if err != nil {
+			t.Skipf("Cannot open test file; skipping: %v", err)
+		}
+		defer fi.Close()
+
+		lexer := NewLexer(struct{ io.Reader }{fi})
+		lexer.Name = "no-name"
+
+		tokenSeq{
+			_comment, _ws,
+			wordCase("statement"), _ws, wordCase("word"), _semicolon, _ws,
+			wordCase("section"), _ws, quoteCase("string"), _ws, _curlopen, _ws,
+			_curlclose, _ws,
+			_comment,
+		}.RunWithLexer(t, lexer)
+
+		if lexer.pos.Name != noname {
+			t.Fatalf("lexer.pos.Name = %q; want %q", lexer.pos.Name, noname)
+		}
+	})
 }
