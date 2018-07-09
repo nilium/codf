@@ -2,6 +2,7 @@ codf
 ====
 [![Build Status](https://travis-ci.org/nilium/codf.svg?branch=master)](https://travis-ci.org/nilium/codf)
 [![codecov](https://codecov.io/gh/nilium/codf/branch/master/graph/badge.svg)](https://codecov.io/gh/nilium/codf)
+[![Go Report Card](https://goreportcard.com/badge/go.spiff.io/codf)](https://goreportcard.com/report/go.spiff.io/codf)
 [![GoDoc](https://godoc.org/go.spiff.io/codf?status.svg)](https://godoc.org/go.spiff.io/codf)
 
 
