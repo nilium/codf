@@ -56,7 +56,7 @@ Both sections and statements may have an optional set of values
 following their name, as above. These are called parameters for lack of
 a better term.
 
-Parameters These must be one of the types described below.
+Parameters must be one of the types described below.
 
 
 ### Comments
