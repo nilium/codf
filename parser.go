@@ -5,6 +5,9 @@ import (
 	"fmt"
 )
 
+// ErrTooManyExprs is returned by ParseExpr when ParseExpr would return more than a single ExprNode.
+var ErrTooManyExprs = errors.New("too many expresssions")
+
 type tokenConsumer func(Token) (tokenConsumer, error)
 
 // TokenReader is anything capable of reading a token and returning either it or an error.
@@ -97,6 +100,8 @@ func (p *Parser) Parse(tr TokenReader) (err error) {
 //
 // If an error occurs during parsing, it has no effect on the behavior of subsequent Parse or
 // ParseExpr calls. Errors returned by Parse do not affect ParseExpr.
+//
+// If ParseExpr would return more than one ExprNode, it returns nil and ErrTooManyExprs.
 func (p *Parser) ParseExpr(tr TokenReader) (ExprNode, error) {
 	defer p.snap()()
 	exp := exprParser{}
@@ -402,8 +407,6 @@ func (m *mapBuilder) addExpr(expr ExprNode) error {
 
 	return nil
 }
-
-var ErrTooManyExprs = errors.New("too many expresssions")
 
 type exprParser struct {
 	expr ExprNode
