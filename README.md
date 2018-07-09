@@ -15,6 +15,63 @@ The root codf package only covers lexing, parsing, and the AST right
 now.
 
 
+Rationale
+---------
+
+_Alternatively: Why yet another config library?_
+
+Codf exists primarily to make expressive, structured configuration easy
+to use. Expressive in this case means, more or less, relatively complex
+but easy to read and write. There are cases of progams like this in the
+wild, such as nginx, where configuration is integral to making use of
+them. Codf takes inspiration from nginx in particular, along with other
+curly-braced config languages. The goal is to provide structure for
+programs where the status quo of JSON-equivalent languages do not.
+
+With that in mind, codf is the result of several years of building
+programs that require configuration to define their runtime behavior.
+This includes several programs whose configuration borders on scripting.
+These programs need configuration not only for inputs (sockets, files,
+DBs) and outputs (metrics, logs, more DBs), but also tasks, schedules,
+data pipelines, state transitions, and so on. Without these, the
+programs are mostly inert and do nothing — this makes configuration
+crucial to their operation. Thus far, all of these programs have used
+some JSON-like language, be it JSON itself, HCL, or YAML (with TOML
+showing up only in other programs I use).
+
+While all of these provide some structure, they’re ultimately poor
+expressions of complex program configuration. They require a lot of
+work-arounds to play nice with Go: often an AST is unavailable (I’ve
+only seen this exposed in HCL), so all pre-processing, such as including
+documents or expanding variables, requires you to decode to a map to
+manipulate the document before consuming it; the structure of the config
+becomes tangled up in not violating a language spec (especially where
+keys are unique); and error messages are often cryptic and useless to
+users. All of this can be made to work, but it looks lazy and feels like
+a kludge.
+
+If you look outside of the common languages, you see configuration like
+[nginx](https://www.nginx.com/resources/wiki/start/topics/examples/full/),
+[apt.conf](https://manpages.debian.org/stretch/apt/apt.conf.5.en.html),
+[gnatsd](https://nats.io/documentation/server/gnatsd-config/)
+(a mishmash of YAML/JSON/HCL; notable more for being specific to gnatsd),
+[Caddyfiles](https://caddyserver.com/docs/caddyfile), and others (Lisps
+and Erlang terms deserve honorable mention since a program’s language
+can work as configuration as well). So, it’s clear that there’s a way to
+express more than just `key = value` for configuration, but if there are
+any libraries for this, I haven’t yet found them.
+
+So, I wrote codf. Codf allows me to write config files with directives
+and structure that expresses more than just key-value pairs. In fact, it
+can parse a wide range of nginx configs with some adjustments for
+comments and quoting style. Using it to handle program configuration is
+fairly easy by walking the AST, and enough metadata is available through
+it that it’s possible to provide users with helpful error feedback.
+Overall, it leads to much cleaner configuration with less reliance on
+reflection, fewer unmarshaling workarounds, and better help for users.
+This in turn makes me happier, because I can write programs that
+function the way I really want them to.
+
 
 Language
 --------
