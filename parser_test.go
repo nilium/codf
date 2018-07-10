@@ -99,7 +99,7 @@ func TestParseAST(t *testing.T) {
 		},
 		{
 			Name: "MinimalSpace",
-			Src:  `sect[]#{}{stmt #{k[2]"p"#{}}true[false];}`,
+			Src:  `sect []#{}{stmt #{k [2]"p"#{}}true [false];}`,
 			Doc: doc().section("sect", mkexprs(), mkmap()).
 				statement("stmt", mkmap("k", mkexprs(2), "p", mkmap()), true, mkexprs(false)).
 				Doc(),

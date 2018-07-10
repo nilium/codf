@@ -406,9 +406,23 @@ func isBarewordRune(r rune) bool {
 		!isBarewordForbidden(r)
 }
 
+// isBarewordTransition returns true if r is valid inside of a token that is not a bareword but
+// would become one by consuming r.
+func isBarewordTransition(r rune) bool {
+	return unicode.In(r, barewordTables...) &&
+		!isStatementSep(r)
+}
+
 // isBarewordForbidden returns true if r is one of the characters that may not appear in a bareword.
 func isBarewordForbidden(r rune) bool {
-	return isStatementSep(r) || unicode.IsControl(r)
+	return isWordSep(r) || unicode.IsControl(r)
+}
+
+func isWordSep(r rune) bool {
+	return unicode.IsSpace(r) ||
+		r == rSentinel || // End statement
+		r == rDoubleQuote || // Quoted string
+		r == rBackQuote // Raw string
 }
 
 func isStatementSep(r rune) bool {
@@ -419,8 +433,7 @@ func isStatementSep(r rune) bool {
 		r == rBracketOpen || // Open array
 		r == rBracketClose || // Close array
 		r == rDoubleQuote || // Quoted string
-		r == rBackQuote || // Raw string
-		r == rComment // Comment
+		r == rBackQuote // Raw string
 }
 
 func isLongIntervalInitial(r rune) bool {
@@ -561,8 +574,20 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 
 func (l *Lexer) lexWordTail(next consumerFunc) consumerFunc {
 	var wordConsumer consumerFunc
+	var braces int
 	wordConsumer = func(r rune) (Token, consumerFunc, error) {
-		if isBarewordRune(r) {
+		switch {
+		case r == rCurlOpen || r == rBracketOpen:
+			braces++
+			l.buffer(r, r)
+			return noToken, wordConsumer, nil
+		case (r == rCurlClose || r == rBracketClose):
+			if braces <= 0 {
+				break
+			}
+			braces--
+			fallthrough
+		case isBarewordRune(r):
 			l.buffer(r, r)
 			return noToken, wordConsumer, nil
 		}
@@ -603,7 +628,7 @@ func (l *Lexer) lexSignedNumber(r rune) (Token, consumerFunc, error) {
 	case isStatementSep(r) || r == eof:
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected number after sign", r)
@@ -629,7 +654,7 @@ func (l *Lexer) lexOctalNumber(r rune) (Token, consumerFunc, error) {
 		l.unread()
 		tok, err := l.valueToken(TOctal, parseBaseInt(8))
 		return tok, l.lexSegment, err
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected octal digit or separator", r)
@@ -656,7 +681,7 @@ func (l *Lexer) lexHexNum(r rune) (Token, consumerFunc, error) {
 		l.unread()
 		tok, err := l.valueToken(THex, parseBaseInt(16))
 		return tok, l.lexSegment, err
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected hex digit or separator", r)
@@ -671,7 +696,7 @@ func (l *Lexer) lexBinNum(r rune) (Token, consumerFunc, error) {
 		l.unread()
 		tok, err := l.valueToken(TBinary, parseBaseInt(2))
 		return tok, l.lexSegment, err
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected binary digit or separator", r)
@@ -695,7 +720,7 @@ func (l *Lexer) lexRationalDenomInitial(r rune) (Token, consumerFunc, error) {
 	case isStatementSep(r) || r == eof:
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected positive number", r)
@@ -706,7 +731,7 @@ func (l *Lexer) lexRationalDenomTail(r rune) (Token, consumerFunc, error) {
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomTail, nil
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	case isStatementSep(r) || r == eof:
 		l.unread()
@@ -757,7 +782,7 @@ func (l *Lexer) lexFloatExponentUnsigned(r rune) (Token, consumerFunc, error) {
 	case r == eof || isStatementSep(r):
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected sign or digit", r)
@@ -776,7 +801,7 @@ func (l *Lexer) lexFloatExponentSignedTail(r rune) (Token, consumerFunc, error) 
 		l.unread()
 		tok, err := l.valueToken(TFloat, parseBigFloat(l.Precision))
 		return tok, l.lexSegment, err
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or separator", r)
@@ -816,7 +841,7 @@ func (l *Lexer) lexFloatEnd(r rune) (Token, consumerFunc, error) {
 		l.unread()
 		tok, err := l.valueToken(TFloat, parseBigFloat(l.Precision))
 		return tok, l.lexSegment, err
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected separator", r)
@@ -835,7 +860,7 @@ func (l *Lexer) lexFloatPointInitial(r rune) (Token, consumerFunc, error) {
 	case r == eof || isStatementSep(r):
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return l.lexFloatPoint(r)
@@ -865,7 +890,7 @@ func (l *Lexer) lexFloatPoint(r rune) (Token, consumerFunc, error) {
 		l.unread()
 		tok, err := l.valueToken(TFloat, parseBigFloat(l.Precision))
 		return tok, l.lexSegment, err
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit, exponent, or separator", r)
@@ -909,7 +934,7 @@ func (l *Lexer) lexIntervalUnitMaybeLong(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexIntervalInitial, nil
 	case isStatementSep(r) || r == eof:
 		return l.lexIntervalInitial(r)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected digit or 's'", r)
@@ -931,7 +956,7 @@ func (l *Lexer) lexIntervalUnitLong(r rune) (Token, consumerFunc, error) {
 	case isStatementSep(r) || r == eof:
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected 's'", r)
@@ -972,7 +997,7 @@ func (l *Lexer) lexIntervalFloatTail(r rune) (Token, consumerFunc, error) {
 	case isStatementSep(r) || r == eof:
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, l.lexIntervalFloatTail, fmt.Errorf("unexpected character %s: expected digit or interval unit", TDuration)
@@ -1013,7 +1038,7 @@ func (l *Lexer) lexInterval(r rune) (Token, consumerFunc, error) {
 	case isStatementSep(r) || r == eof:
 		l.unread()
 		return l.lexBecomeWord(-1)
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected number or interval unit", r)
@@ -1058,7 +1083,7 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case r == 'E' || r == 'e':
 		l.buffer(r, r)
 		return noToken, l.lexFloatExponentUnsigned, nil
-	case isBarewordRune(r):
+	case isBarewordTransition(r):
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q: expected b, x, X, octal, duration unit, or separator", r)
@@ -1117,7 +1142,7 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexFloatExponentUnsigned, nil
 	}
 
-	if isBarewordRune(r) {
+	if isBarewordTransition(r) {
 		return l.lexBecomeWord(r)
 	}
 
@@ -1150,7 +1175,7 @@ func (l *Lexer) lexBaseNumber(neg bool, base int) (consumer consumerFunc) {
 			n++
 			l.buffer(r, r)
 			return noToken, consumer, nil
-		} else if isBarewordRune(r) {
+		} else if isBarewordTransition(r) {
 			return l.lexBecomeWord(r)
 		} else if n == 0 && (isStatementSep(r) || r == eof) {
 			l.unread()

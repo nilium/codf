@@ -283,10 +283,9 @@ func TestBooleans(t *testing.T) {
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("true"), Value: "true"}},
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("Yes"), Value: "Yes"}},
 		_ws, {Token: Token{Kind: TWord, Raw: []byte("FALSE"), Value: "FALSE"}},
-		_curlopen,
-		_curlclose,
+		_ws, _curlopen, _curlclose,
 		_eof,
-	}.Run(t, "TRUE true Yes FALSE{}")
+	}.Run(t, "TRUE true Yes FALSE {}")
 }
 
 func TestStatement(t *testing.T) {
@@ -297,26 +296,35 @@ func TestStatement(t *testing.T) {
 		_ws, {Token: Token{Kind: TOctal, Raw: []byte("+0600"), Value: big.NewInt(0600)}},
 		_ws, {Token: Token{Kind: THex, Raw: []byte("-0xf"), Value: big.NewInt(-15)}},
 		_ws, {Token: Token{Kind: THex, Raw: []byte("0x12f"), Value: big.NewInt(303)}},
+		_ws, wordCase("${FOO:-${BAZ:-Default}}"),
 		_semicolon,
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("stmt/2"), Value: "stmt/2"}},
-		_semicolon,
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("sect"), Value: "sect"}},
-		_curlopen, _curlclose,
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("a"), Value: "a"}},
-		_semicolon,
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("b"), Value: "b"}},
-		_curlopen, _curlclose,
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("c"), Value: "c"}},
-		_comment,
+		_ws, wordCase("stmt/2"), _semicolon,
+		_ws, wordCase("stmt{}"), _semicolon,
+		_ws, wordCase("invalid"), _curlclose,
+		_ws, wordCase("sect"), _ws, _curlopen, _curlclose,
+		_ws, wordCase("a"), _semicolon,
+		_ws, wordCase("b{}"),
+		_ws, wordCase("c'foo"),
+		_ws, _comment,
+		_ws, wordCase("#[foo]"),
+		_ws, wordCase("$[foo]"),
+		_ws, wordCase("${foo}"),
+		_ws, wordCase("${{foo}}"),
+		_ws, wordCase("${[foo}]"),
+		_ws, wordCase("${foo}"), _curlclose,
+		_ws, wordCase("${foo]"), _bracketclose,
 		_ws, _semicolon, _semicolon,
 		_ws, _eof,
 	}.Run(t, `
-		stmt -1234 +0600 -0xf 0x12f;
+		stmt -1234 +0600 -0xf 0x12f ${FOO:-${BAZ:-Default}};
 		stmt/2;
-		sect{}
+		stmt{};
+		invalid}
+		sect {}
 		a;
 		b{}
-		c'foo
+		c'foo 'foo
+		#[foo] $[foo] ${foo} ${{foo}} ${[foo}] ${foo}} ${foo]]
 		;;
 		`)
 }
@@ -726,6 +734,7 @@ func TestFloats(t *testing.T) {
 		{Token: Token{Kind: TWord, Value: "k"}},
 		_ws, dec("0.5"),
 		_curlclose,
+		_ws, dec("0e123"),
 		_ws, dec("0.0e0"),
 		_ws, dec("0.0E0"),
 		_ws, dec("1.2345"),
@@ -739,7 +748,7 @@ func TestFloats(t *testing.T) {
 			-1.2345 -12345e-4 -1.2345e4 -1.2345e+4
 			+0.0 +0.5 +0.0e0 +0.0E0
 			+1.2345 +12345E-4 +1.2345E4 +1.2345E+4
-			[0.0] #{k 0.5} 0.0e0 0.0E0
+			[0.0] #{k 0.5} 0e123 0.0e0 0.0E0
 			1.2345 12345e-4 1.2345e4 1.2345e+4
 		;`)
 
