@@ -264,8 +264,7 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 	case TCurlClose:
 		if mb, ok := p.context().(*mapBuilder); ok {
 			if mb.k != nil {
-				return nil, unexpected(tok, "expected value for key %q at %v",
-					mb.m.Token().Value, mb.m.Token().Start)
+				return nil, p.closeError(tok)
 			}
 			p.popContext()
 			m := mb.m
@@ -386,12 +385,7 @@ func (m *mapBuilder) addExpr(expr ExprNode) error {
 		return unexpected(expr.Token(), "bad key; expected word or string")
 	}
 
-	ks, ok := String(m.k)
-	if !ok {
-		return fmt.Errorf("key token %q at %v invalid: value must be a string",
-			m.k.Token().Raw, m.k.Token().Start)
-	}
-
+	ks, _ := String(m.k)
 	entry := m.m.Elems[ks]
 	if entry == nil {
 		entry = &MapEntry{}
