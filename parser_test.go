@@ -118,6 +118,8 @@ func TestParseAST(t *testing.T) {
 					0.5h30s0.5s500us0.5us1ns
 					#/foobar/ #//
 					0/1 120/4
+					#{} #{k v}
+					[] [v1 v2]
 				{
 					inside Yes YES yes yeS ' Last is always a bareword here
 						No NO no nO
@@ -136,6 +138,8 @@ func TestParseAST(t *testing.T) {
 				time.Hour/2+time.Minute/2+time.Second/2+time.Millisecond/2+time.Microsecond/2+time.Nanosecond,
 				mkregex("foobar"), mkregex(""),
 				mkrat(0, 1), mkrat(30, 1),
+				mkmap(), mkmap("k", "v"),
+				mkexprs(), mkexprs("v1", "v2"),
 			).statement("inside",
 				true, true, true, "yeS",
 				false, false, false, "nO",
@@ -380,6 +384,21 @@ func TestParseExpr(t *testing.T) {
 		{
 			name:    "Comment",
 			in:      "' comment",
+			wantErr: true,
+		},
+		{
+			name:    "KeyWithoutValue",
+			in:      "#{key}",
+			wantErr: true,
+		},
+		{
+			name:    "BadMapClosing",
+			in:      "#{key value]",
+			wantErr: true,
+		},
+		{
+			name:    "BadMapKey",
+			in:      "#{1 value}",
 			wantErr: true,
 		},
 	}

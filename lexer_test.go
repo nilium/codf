@@ -245,11 +245,21 @@ func TestBareword(t *testing.T) {
 			Value: "-",
 		}},
 		_semicolon,
-		{Token: Token{Kind: TWhitespace}},
+		_ws,
 		{Token: Token{Kind: TComment, Raw: []byte(" foo")}},
-		{Token: Token{Kind: TWhitespace}},
+		_ws, wordCase("+f"),
+		_ws, wordCase("1/1f"),
+		_ws, wordCase("1nq"),
+		_ws, wordCase("1s1.s"),
+		_ws, wordCase("#foo"),
+		_ws, wordCase("#"),
+		quoteCase("foo"),
 		_eof,
-	}.Run(t, "\t.foo$bar#baz=quux\n\t10.0.0.0/8 # #f + -; ' foo\n\n")
+	}.Run(t, "\t.foo$bar#baz=quux\n"+
+		"\t10.0.0.0/8 # #f + -; ' foo\n"+
+		"\n"+
+		"+f 1/1f 1nq 1s1.s #foo #\"foo\"",
+	)
 }
 
 func TestWhitespace(t *testing.T) {
