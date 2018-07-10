@@ -188,6 +188,24 @@ type NamedReader interface {
 
 var noToken Token
 
+// Special lexer runes
+const (
+	rSentinel     = ';'
+	rCurlOpen     = '{'
+	rCurlClose    = '}'
+	rBracketOpen  = '['
+	rBracketClose = ']'
+	rDoubleQuote  = '"'
+	rBackQuote    = '`'
+	rSpecial      = '#'
+	rComment      = '\''
+	rDot          = '.'
+	rFracSep      = '/'
+	rBaseSep      = '#'
+	rRegexpOpen   = '/'
+	rRegexpClose  = '/'
+)
+
 // Lexer takes an input sequence of runes and constructs Tokens from it.
 type Lexer struct {
 	// Precision is the precision used in *big.Float when taking the actual value of a TFloat
@@ -395,14 +413,14 @@ func isBarewordForbidden(r rune) bool {
 
 func isStatementSep(r rune) bool {
 	return unicode.IsSpace(r) ||
-		r == ';' || // End statement
-		r == '{' || // Begin section (in statement)
-		r == '}' || // Close map (in statement)
-		r == '[' || // Open array
-		r == ']' || // Close array
-		r == '"' || // Quoted string
-		r == '`' || // Raw string
-		r == '\'' // Comment
+		r == rSentinel || // End statement
+		r == rCurlOpen || // Begin section (in statement)
+		r == rCurlClose || // Close map (in statement)
+		r == rBracketOpen || // Open array
+		r == rBracketClose || // Close array
+		r == rDoubleQuote || // Quoted string
+		r == rBackQuote || // Raw string
+		r == rComment // Comment
 }
 
 func isLongIntervalInitial(r rune) bool {
@@ -492,27 +510,27 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexSpace(l.lexSegment), nil
 
 	// Semicolon
-	case r == ';':
+	case r == rSentinel:
 		return l.token(TSemicolon, false), l.lexSegment, nil
 
 	// Braces
-	case r == '{':
+	case r == rCurlOpen:
 		return l.token(TCurlOpen, false), l.lexSegment, nil
-	case r == '}':
+	case r == rCurlClose:
 		return l.token(TCurlClose, false), l.lexSegment, nil
 
 	// Brackets
-	case r == '[':
+	case r == rBracketOpen:
 		return l.token(TBracketOpen, false), l.lexSegment, nil
-	case r == ']':
+	case r == rBracketClose:
 		return l.token(TBracketClose, false), l.lexSegment, nil
 
 	// Comment
-	case r == '\'':
+	case r == rComment:
 		return noToken, l.lexComment(l.lexSegment), nil
 
 	// Map / regexp (#// | #{})
-	case r == '#':
+	case r == rSpecial:
 		return noToken, l.lexSpecial, nil
 
 	// Numerics (integer, decimal, rational, duration)
@@ -527,10 +545,10 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexNonZero, nil
 
 	// String
-	case r == '"':
+	case r == rDoubleQuote:
 		l.buffer(r, -1)
 		return noToken, l.lexString, nil
-	case r == '`':
+	case r == rBackQuote:
 		l.buffer(r, -1)
 		return noToken, l.lexRawString, nil
 
@@ -984,7 +1002,7 @@ func (l *Lexer) lexInterval(r rune) (Token, consumerFunc, error) {
 	// Sep          -> Bareword
 	//
 	switch {
-	case r == '.':
+	case r == rDot:
 		l.buffer(r, r)
 		return noToken, l.lexIntervalFloatInitial, nil
 	case isDecimal(r):
@@ -1023,7 +1041,7 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case isOctal(r):
 		l.buffer(r, r)
 		return noToken, l.lexOctalNumber, nil
-	case r == '/':
+	case r == rFracSep:
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomInitial, nil
 	case r == 'b' || r == 'B':
@@ -1032,7 +1050,7 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	case r == 'x' || r == 'X':
 		l.buffer(r, -1)
 		return noToken, l.lexNoTerminate(l.lexHexNum, "hex digit"), nil
-	case r == '.':
+	case r == rDot:
 		l.buffer(r, r)
 		return noToken, l.lexFloatPointInitial, nil
 	case isIntervalInitial(r):
@@ -1073,7 +1091,7 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	}
 
 	switch r {
-	case '#':
+	case rBaseSep:
 		l.buffer(r, -1)
 
 		str := l.strbuf.String()
@@ -1088,10 +1106,10 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 
 		l.strbuf.Reset()
 		return noToken, l.lexBaseNumber(neg, base), nil
-	case '/':
+	case rFracSep:
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomInitial, nil
-	case '.':
+	case rDot:
 		l.buffer(r, r)
 		return noToken, l.lexFloatPointInitial, nil
 	case 'E', 'e':
@@ -1164,7 +1182,7 @@ func (l *Lexer) lexRawString(r rune) (Token, consumerFunc, error) {
 	switch r {
 	case eof:
 		return noToken, l.lexRawString, ErrUnexpectedEOF
-	case '`':
+	case rBackQuote:
 		return noToken, l.lexRawStringEscape, nil
 	}
 	l.buffer(-1, r)
@@ -1176,7 +1194,7 @@ func (l *Lexer) lexRawStringEscape(r rune) (Token, consumerFunc, error) {
 	// If the next rune is a '`', it is an escaped backquote.
 	// Otherwise, the RawString has ended.
 	//
-	if r == '`' {
+	if r == rBackQuote {
 		l.buffer(r, r)
 		return noToken, l.lexRawString, nil
 	}
@@ -1194,7 +1212,7 @@ func (l *Lexer) lexString(r rune) (Token, consumerFunc, error) {
 		return noToken, l.lexString, ErrUnexpectedEOF
 	case '\\':
 		return noToken, l.lexStringEscape, nil
-	case '"':
+	case rDoubleQuote:
 		return l.token(TString, true), l.lexSegment, nil
 	}
 	l.buffer(-1, r)
@@ -1227,8 +1245,8 @@ func (l *Lexer) lexStringEscape(r rune) (Token, consumerFunc, error) {
 		l.buffer(r, '\v')
 	case '\\':
 		l.buffer(r, '\\')
-	case '"':
-		l.buffer(r, '"')
+	case rDoubleQuote:
+		l.buffer(r, rDoubleQuote)
 	case 'x': // 2 hex digits
 		l.buffer(r, -1)
 		next = l.lexHexStringEscape(1, func(u uint32) { l.strbuf.WriteByte(byte(u)) })
@@ -1318,18 +1336,18 @@ func (l *Lexer) lexSpecial(r rune) (Token, consumerFunc, error) {
 	// Sep          -> Bareword
 	//
 	switch {
-	case r == '{':
+	case r == rCurlOpen:
 		return l.token(TMapOpen, false), l.lexSegment, nil
-	case r == '/':
-		l.buffer('#', -1)
+	case r == rRegexpOpen:
+		l.buffer(rSpecial, -1)
 		l.buffer(r, -1)
 		return noToken, l.lexRegexp, nil
 	case isStatementSep(r) || r == eof:
-		l.buffer('#', '#')
+		l.buffer(rSpecial, rSpecial)
 		l.unread()
 		return l.lexBecomeWord(-1)
 	case isBarewordRune(r):
-		l.buffer('#', '#')
+		l.buffer(rSpecial, rSpecial)
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q after #: expected { or /", r)
@@ -1341,7 +1359,7 @@ func (l *Lexer) lexEscapeRegexp(r rune) (Token, consumerFunc, error) {
 	// a forward slash, the backslash is buffered as part of the regexp (e.g., so that /\d+/
 	// does not require escaping).
 	//
-	if r != '/' {
+	if r != rRegexpClose {
 		l.buffer(-1, '\\')
 	}
 	l.buffer(r, r)
@@ -1368,12 +1386,11 @@ func (l *Lexer) lexRegexp(r rune) (Token, consumerFunc, error) {
 	case '\\':
 		l.buffer(r, -1)
 		return noToken, l.lexEscapeRegexp, nil
-	case '/':
+	case rRegexpClose:
 		l.buffer(r, -1)
 		tok, err := l.valueToken(TRegexp, parseRegexp)
 		return tok, l.lexSegment, err
 	}
 	l.buffer(r, r)
 	return noToken, l.lexRegexp, nil
-
 }
