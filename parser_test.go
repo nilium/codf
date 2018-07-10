@@ -72,7 +72,7 @@ func TestParseAST(t *testing.T) {
 		},
 		{
 			Name: "EmptyArrayMap",
-			Src:  `foo 1 { bar [] #{}; } map #{} [];' eof`,
+			Src:  `foo 1 { bar [] %{}; } map %{} [];# eof`,
 			Doc: doc().section("foo", 1).
 				statement("bar", []ExprNode{}, mkmap()).
 				up().statement("map", mkmap(), []ExprNode{}).
@@ -80,26 +80,26 @@ func TestParseAST(t *testing.T) {
 		},
 		{
 			Name: "NestedArrayMaps",
-			Src: `foo [' Nested map inside array
-					#{ k [  1       ' integer
-						"2"     ' string
-						three   ' bareword (string)
-						true    ' bool (bareword->bool)
-						` + "`true`" + ` ' raw quote bool
+			Src: `foo [# Nested map inside array
+					%{ ${key} [  1       # integer
+						"2"     # string
+						three   # bareword (string)
+						true    # bool (bareword->bool)
+						` + "`true`" + ` # raw quote bool
 						]
 					   ` + "`raw`" + ` bare
 					}
 				];`,
 			Doc: doc().statement("foo", mkexpr([]ExprNode{
 				mkmap(
-					"k", mkexpr(mkexprs(1, "2", "three", true, "true")),
+					"${key}", mkexpr(mkexprs(1, "2", "three", true, "true")),
 					"raw", "bare",
 				),
 			})).Doc(),
 		},
 		{
 			Name: "MinimalSpace",
-			Src:  `sect []#{}{stmt #{k [2]"p"#{}}true [false];}`,
+			Src:  `sect []%{}{stmt %{k [2]"p"%{}}true [false];}`,
 			Doc: doc().section("sect", mkexprs(), mkmap()).
 				statement("stmt", mkmap("k", mkexprs(2), "p", mkmap()), true, mkexprs(false)).
 				Doc(),
@@ -116,12 +116,12 @@ func TestParseAST(t *testing.T) {
 					"\u1234` + "\n" + `\x00"
 					"foo" bar
 					0.5h30s0.5s500us0.5us1ns
-					#/foobar/ #//
+					%/foobar/ %//
 					0/1 120/4
-					#{} #{k v}
+					%{} %{k v}
 					[] [v1 v2]
 				{
-					inside Yes YES yes yeS ' Last is always a bareword here
+					inside Yes YES yes yeS # Last is always a bareword here
 						No NO no nO
 						True TRUE true truE
 						False FALSE false falsE;
@@ -147,11 +147,11 @@ func TestParseAST(t *testing.T) {
 				false, false, false, "falsE",
 			).Doc(),
 		},
-		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{;};`},
-		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{ k };`},
-		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{ 1234 five };`},
-		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{ k ];`},
-		{Fun: mustNotParse, Name: "BadMapClose", Src: `src #{];`},
+		{Fun: mustNotParse, Name: "BadMapClose", Src: `src %{;};`},
+		{Fun: mustNotParse, Name: "BadMapClose", Src: `src %{ k };`},
+		{Fun: mustNotParse, Name: "BadMapClose", Src: `src %{ 1234 five };`},
+		{Fun: mustNotParse, Name: "BadMapClose", Src: `src %{ k ];`},
+		{Fun: mustNotParse, Name: "BadMapClose", Src: `src %{];`},
 		{Fun: mustNotParse, Name: "BadArrayClose", Src: `src [;];`},
 		{Fun: mustNotParse, Name: "BadArrayClose", Src: `src [};`},
 		{Fun: mustNotParse, Name: "BadStatementClose", Src: `src };`},
@@ -159,7 +159,7 @@ func TestParseAST(t *testing.T) {
 		{Fun: mustNotParse, Name: "BadStatementClose", Src: `src`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src {`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src {]`},
-		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src { ' comment`},
+		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src { # comment`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `}`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `]`},
 	}
@@ -177,7 +177,7 @@ func TestParseExample(t *testing.T) {
         strip-x-headers yes;
         log-access no;
     }
-    ' keep caches in 64mb of memory
+    # keep caches in 64mb of memory
     cache memory 64mb {
          expire 10m 404;
          expire 1h  301 302;
@@ -253,12 +253,12 @@ func TestParseExpr(t *testing.T) {
 	cases := []testCase{
 		{
 			name: "QuotedString",
-			in:   `  "quoted string"  ' comment ' `,
+			in:   `  "quoted string"  # comment # `,
 			want: mkexpr("quoted string"),
 		},
 		{
 			name: "Raw String",
-			in:   "  `raw string`  ' comment '",
+			in:   "  `raw string`  # comment #",
 			want: mkexpr("raw string"),
 		},
 		{
@@ -343,7 +343,7 @@ func TestParseExpr(t *testing.T) {
 		},
 		{
 			name: "Map",
-			in:   "#{ foo 5 }",
+			in:   "%{ foo 5 }",
 			want: mkmap("foo", 5),
 		},
 		{
@@ -353,7 +353,7 @@ func TestParseExpr(t *testing.T) {
 		},
 		{
 			name:    "MapDoubleClose",
-			in:      "#{ foo 5 }}",
+			in:      "%{ foo 5 }}",
 			wantErr: true,
 		},
 		{
@@ -378,27 +378,27 @@ func TestParseExpr(t *testing.T) {
 		},
 		{
 			name:    "SpaceComment",
-			in:      "  \n  ' foobar\n   'bar\n\n\t\n",
+			in:      "  \n  # foobar\n   #bar\n\n\t\n",
 			wantErr: true,
 		},
 		{
 			name:    "Comment",
-			in:      "' comment",
+			in:      "# comment",
 			wantErr: true,
 		},
 		{
 			name:    "KeyWithoutValue",
-			in:      "#{key}",
+			in:      "%{key}",
 			wantErr: true,
 		},
 		{
 			name:    "BadMapClosing",
-			in:      "#{key value]",
+			in:      "%{key value]",
 			wantErr: true,
 		},
 		{
 			name:    "BadMapKey",
-			in:      "#{1 value}",
+			in:      "%{1 value}",
 			wantErr: true,
 		},
 	}
@@ -415,8 +415,12 @@ func TestParseExpr(t *testing.T) {
 			lexer := NewLexer(strings.NewReader(c.in))
 			got, err := parser.ParseExpr(lexer)
 			if (err != nil) != c.wantErr {
+				if err == nil {
+					t.Logf("v = %v (%#+v)", got, got)
+				}
 				t.Fatalf("error parsing %q; expected err = %t; got %v", c.in, c.wantErr, err)
 			} else if c.wantErr {
+				t.Logf("err = %v", err)
 				return
 			}
 			objectsEqual(t, "", got, c.want)

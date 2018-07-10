@@ -186,7 +186,7 @@ func TestComment(t *testing.T) {
 		{Token: Token{Kind: TComment, Raw: []byte("")}},
 		{Token: Token{Kind: TComment, Raw: []byte(" foo bar baz")}},
 		_eof,
-	}.Run(t, "'\n' foo bar baz")
+	}.Run(t, "#\n# foo bar baz")
 }
 
 func TestBareword(t *testing.T) {
@@ -215,18 +215,18 @@ func TestBareword(t *testing.T) {
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
-			Raw:   []byte("#"),
+			Raw:   []byte("'"),
 			Start: Location{Name: "test.codf", Offset: 31, Line: 2, Column: 13},
 			End:   Location{Name: "test.codf", Offset: 32, Line: 2, Column: 14},
-			Value: "#",
+			Value: "'",
 		}},
 		_ws,
 		{Token: Token{
 			Kind:  TWord,
-			Raw:   []byte("#f"),
+			Raw:   []byte("'f"),
 			Start: Location{Name: "test.codf", Offset: 33, Line: 2, Column: 15},
 			End:   Location{Name: "test.codf", Offset: 35, Line: 2, Column: 17},
-			Value: "#f",
+			Value: "'f",
 		}},
 		_ws,
 		{Token: Token{
@@ -251,14 +251,14 @@ func TestBareword(t *testing.T) {
 		_ws, wordCase("1/1f"),
 		_ws, wordCase("1nq"),
 		_ws, wordCase("1s1.s"),
-		_ws, wordCase("#foo"),
-		_ws, wordCase("#"),
+		_ws, wordCase("%foo"),
+		_ws, wordCase("%"),
 		quoteCase("foo"),
 		_eof,
 	}.Run(t, "\t.foo$bar#baz=quux\n"+
-		"\t10.0.0.0/8 # #f + -; ' foo\n"+
+		"\t10.0.0.0/8 ' 'f + -; # foo\n"+
 		"\n"+
-		"+f 1/1f 1nq 1s1.s #foo #\"foo\"",
+		"+f 1/1f 1nq 1s1.s %foo %\"foo\"",
 	)
 }
 
@@ -305,8 +305,9 @@ func TestStatement(t *testing.T) {
 		_ws, wordCase("a"), _semicolon,
 		_ws, wordCase("b{}"),
 		_ws, wordCase("c'foo"),
+		_ws, wordCase("'foo"),
 		_ws, _comment,
-		_ws, wordCase("#[foo]"),
+		_ws, wordCase("%[foo]"),
 		_ws, wordCase("$[foo]"),
 		_ws, wordCase("${foo}"),
 		_ws, wordCase("${{foo}}"),
@@ -323,8 +324,8 @@ func TestStatement(t *testing.T) {
 		sect {}
 		a;
 		b{}
-		c'foo 'foo
-		#[foo] $[foo] ${foo} ${{foo}} ${[foo}] ${foo}} ${foo]]
+		c'foo 'foo # Comment
+		%[foo] $[foo] ${foo} ${{foo}} ${[foo}] ${foo}} ${foo]]
 		;;
 		`)
 }
@@ -351,25 +352,25 @@ func TestRegexp(t *testing.T) {
 	regex := regexp.MustCompile
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
-		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#/foo\\/bar\n/"), Value: regex("foo/bar\n")}},
-		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#//"), Value: regex("")}},
-		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("#/\\./"), Value: regex("\\.")}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("%/foo\\/bar\n/"), Value: regex("foo/bar\n")}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("%//"), Value: regex("")}},
+		_ws, {Token: Token{Kind: TRegexp, Raw: []byte("%/\\./"), Value: regex("\\.")}},
 		_semicolon,
 		_eof,
-	}.Run(t, "stmt #/foo\\/bar\n/ #// #/\\./;")
+	}.Run(t, "stmt %/foo\\/bar\n/ %// %/\\./;")
 
 	// Fail on EOF at points in regexp parsing
 	// EOF in regexp (start)
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
 		_ws, _error,
-	}.Run(t, "stmt #/")
+	}.Run(t, "stmt %/")
 
 	// EOF in regexp (middle)
 	tokenSeq{
 		{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}},
 		_ws, _error,
-	}.Run(t, "stmt #/foobar")
+	}.Run(t, "stmt %/foobar")
 }
 
 func TestString(t *testing.T) {
@@ -748,7 +749,7 @@ func TestFloats(t *testing.T) {
 			-1.2345 -12345e-4 -1.2345e4 -1.2345e+4
 			+0.0 +0.5 +0.0e0 +0.0E0
 			+1.2345 +12345E-4 +1.2345E4 +1.2345E+4
-			[0.0] #{k 0.5} 0e123 0.0e0 0.0E0
+			[0.0] %{k 0.5} 0e123 0.0e0 0.0E0
 			1.2345 12345e-4 1.2345e4 1.2345e+4
 		;`)
 

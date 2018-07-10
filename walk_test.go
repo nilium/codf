@@ -90,7 +90,7 @@ func TestWalk(t *testing.T) {
 		sendfile no;
 		keepalive_timeout 10s;
 		cache /var/run/sv/cache 3;
-		cache_proxy [200 301 302 404] 5m; ' defaults to cache_proxy [] 0
+		cache_proxy [200 301 302 404] 5m; # defaults to cache_proxy [] 0
 	`))
 
 	t.Run("Valid", func(t *testing.T) {

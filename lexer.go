@@ -197,8 +197,8 @@ const (
 	rBracketClose = ']'
 	rDoubleQuote  = '"'
 	rBackQuote    = '`'
-	rSpecial      = '#'
-	rComment      = '\''
+	rSpecial      = '%'
+	rComment      = '#'
 	rDot          = '.'
 	rFracSep      = '/'
 	rBaseSep      = '#'
@@ -1104,7 +1104,7 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	// BarewordRune -> lex bareword
 	//
 	switch {
-	case isStatementSep(r), r == eof:
+	case r != rBaseSep && (isStatementSep(r) || r == eof):
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
 		return tok, l.lexSegment, err

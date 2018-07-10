@@ -90,8 +90,8 @@ a semicolon (;):
     enable-gophers;
     enable-gophers yes;
     enable-gophers yes with-butter;
-    ; ' This line doesn't have a statement -- a semicolon on its own is
-      ' an empty statement and does nothing.
+    ; # This line doesn't have a statement -- a semicolon on its own is
+      # an empty statement and does nothing.
 
 
 ### Sections
@@ -101,7 +101,7 @@ further sections or statements:
 
     outer-section {
         inner-section /some/path {
-            ' ...
+            # ...
         }
 
         enable-gophers yes;
@@ -119,10 +119,10 @@ Parameters must be one of the types described below.
 
 ### Comments
 
-A comment begins with an apostrophe and extends to the nearest line
-ending (a linefeed / 0x0A byte):
+A comment begins with a pound or hash (`#`) and extends to the nearest
+line ending (a linefeed / 0x0A byte):
 
-    ' This is a comment
+    # This is a comment
 
 Comments are not included in the parsed AST and may not be used to
 influence configuration.
@@ -140,11 +140,11 @@ Integers can be written in base 10, 16, 8, and 2, as well as arbitrary
 bases in the range of 2-36:
 
     base-10 12345;
-    base-16 0x70f; ' 1807
-    base-8  0712;  ' 458
-    base-2  0b101; ' 5
-    base-3  3#210; ' 21
-    base-36 36#zz; ' 1295
+    base-16 0x70f; # 1807
+    base-8  0712;  # 458
+    base-2  0b101; # 5
+    base-3  3#210; # 21
+    base-36 36#zz; # 1295
 
 Integers are arbitarily long and represented as a `*big.Int`.
 
@@ -153,8 +153,8 @@ Integers are arbitarily long and represented as a `*big.Int`.
 Floats are written either as integers with exponents or decimal numbers
 (with optional exponent):
 
-    float-decimal   1.23456;    ' positive
-    float-exponent  -123456e-5; ' negative
+    float-decimal   1.23456;    # positive
+    float-exponent  -123456e-5; # negative
     float-big       1.23456789e200;
 
 Floats are represented using a `*big.Float`. Precision can be adjusted
@@ -166,8 +166,8 @@ DefaultPrecision.
 Rationals are expressed as numerator/denominator, similar to lisps. It
 is illegal to use a denominator of zero (0):
 
-    rational -5/40; ' -1/8
-    rational 0/40;  ' 0/1
+    rational -5/40; # -1/8
+    rational 0/40;  # 0/1
 
 Rationals are represented using a `*big.Rat`.
 
@@ -180,8 +180,8 @@ beginning with a period as Go does (e.g., ".5s" -- this has to be
 written as "0.5s" in codf). As with Go, it's valid to use "µs" or "us"
 for microseconds.
 
-    durations 0s -1s 1h 500ms;  ' 0s -1s 1h0m0s 500ms
-    decimals  0.5us 0.5s 0.5ms; ' 500ns 500ms 500µs
+    durations 0s -1s 1h 500ms;  # 0s -1s 1h0m0s 500ms
+    decimals  0.5us 0.5s 0.5ms; # 500ns 500ms 500µs
 
 Durations are represented using `time.Duration`.
 
@@ -197,9 +197,9 @@ contrast to Go, newlines in double-quoted strings are permitted without
 escaping them.
 
     simple-string "foobar";
-    escapes       "foo\nbar"; ' "foo\nbar"
+    escapes       "foo\nbar"; # "foo\nbar"
     newline       "foo
-    bar";                     ' "foo\nbar"
+    bar";                     # "foo\nbar"
 
 ##### Raw strings 
 Raw strings are surrounded by backquotes (or backticks -- the "`"
@@ -207,9 +207,9 @@ character). Like Go raw string literals, raw strings can contain almost
 anything. Unlike Go raw string literals, a backquote can be escaped
 inside of a raw string by writing two of them: "``". For example:
 
-    empty           ``;           ' ""
-    with-quotes     `"foobar"`;   ' "\"foobar\""
-    with-backquotes ```foobar```; ' "`foobar`"
+    empty           ``;           # ""
+    with-quotes     `"foobar"`;   # "\"foobar\""
+    with-backquotes ```foobar```; # "`foobar`"
 
 ##### Barewords
 Barewords are unquoted strings and usually more convenient than other
@@ -221,14 +221,26 @@ semicolons, braces, pound, and plus/minus. The rest of a bareword may
 contain decimal numbers, pound, and plus/minus -- semicolons, braces,
 and quotes are still reserved.
 
-    leading-dot .dot;           ' ".dot"
-    symbols     $^--;           ' "$^--"
-    slashes     /foo/bar;       ' "/foo/bar"
-    commas      Hello, World;   ' "Hello," "World" -- two strings
-    unicode     こんにちは世界; ' "こんにちは世界"
+    leading-dot .dot;           # ".dot"
+    symbols     $^--;           # "$^--"
+    slashes     /foo/bar;       # "/foo/bar"
+    commas      Hello, World;   # "Hello," "World" -- two strings
+    unicode     こんにちは世界; # "こんにちは世界"
 
 It is not possible to write a bareword that uses a boolean keyword
 except as a statement name (described below).
+
+If an opening brace or square bracket occurs in a bareword, an equal
+number of closing brace or square brackets must be seen in the same word
+before they will have an effect. It does not matter if the braces are
+mismatched, only that there is an equal number of them. For example, the
+text `${{word]]` is parsed as a single word, but if another `]` or `}`
+occurred after it, without spacing, it would be treated as a closing
+brace. This can be used to represent variable expansions in barewords,
+such as `${VAR:-default}`.
+
+If a pound is encountered mid-word, it is part of the word and does not
+begin a comment.
 
 Barewords are represented as `string`.
 
@@ -248,8 +260,8 @@ Booleans can be represented using the following values:
 All keywords can be written in lowercase, uppercase, or titlecase. For
 example:
 
-    t-values YES True true; ' true true true
-    f-values FALSE No no;   ' false false false
+    t-values YES True true; # true true true
+    f-values FALSE No no;   # false false false
 
 Other case combinations are not valid (i.e., booleans keywords
 case-sensitive).
@@ -263,15 +275,15 @@ Booleans are represented as `bool`.
 
 #### Regular Expressions
 
-Regular expressions are written as #/regex/, where internal /s can be
+Regular expressions are written as %/regex/, where internal /s can be
 escaped using \/. These are treated as re2 regular expressions and
 parsed using the stdlib regexp package.
 
-    empty-regex  #//;
-    simple-regex #/foo/;
-    slash-regex  #/foo\/bar/;
+    empty-regex  %//;
+    simple-regex %/foo/;
+    slash-regex  %/foo\/bar/;
 
-Regular expressions are represented as `*regexp.Regexp`.
+Regular expressions are represented as `\*regexp.Regexp`.
 
 #### Arrays
 
@@ -285,29 +297,29 @@ brackets and comments):
 
 Any of the above value types can be held by an array.
 
-An array in the AST is represented as an `*Array`, which contains
+An array in the AST is represented as an `\*Array`, which contains
 a sequence of `[]ExprNode`.
 
 #### Maps
 
 Maps are unordered sets of space-delimited key-value pairs between curly
-braces, prefixed by a pound (`#{}`). Key-value pairs in a map are
+braces, prefixed by a percent sign (`%{}`). Key-value pairs in a map are
 written as `KEY VALUE` (minus quotes), where each KEY must be followed
 by a VALUE (separated by a space). For example:
 
-    empty-map #{};
-    normal-map #{
-        ' Key    Value
-        foo      1234      ' "foo" => 1234
-        "bar"    #/baz/    ' "bar"  => #/baz/
+    empty-map %{};
+    normal-map %{
+        # Key    Value
+        foo      1234      # "foo" => 1234
+        "bar"    #/baz/    # "bar"  => #/baz/
     };
 
 Map keys must be strings, either bare or quoted. If a key occurs more
 than once in a map, only the last value is kept.
 
-Maps are represented as a `*Map`, which contains a map of strings to
-`*MapEntry`. Each `*MapEntry` contains the original key, value, and the
-order that it was parsed in -- as above, codf maps are unordered, so
+Maps are represented as a `\*Map`, which contains a map of strings to
+`\*MapEntry`. Each `\*MapEntry` contains the original key, value, and
+the order that it was parsed in -- as above, codf maps are unordered, so
 ordering is intended only to be kept for reformatting and other tools
 right now.
 

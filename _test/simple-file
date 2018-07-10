@@ -1,8 +1,8 @@
-' Start
+# Start
 
 statement word;
 
 section "string" {
 }
 
-' End of file
+# End of file
