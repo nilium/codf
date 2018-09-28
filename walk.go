@@ -42,6 +42,12 @@ type WalkExiter interface {
 //
 // Walk will return a *WalkError if any error occurs during a walk. The WalkError will contain both
 // the parent and child node that the error occurred for.
+//
+// If the walker is a WalkMapper, any error in attempting to map a node will return a WalkError with
+// the original node, not any resulting node. If the mapping is to a nil node without error, the
+// node is deleted from the parent.
+//
+// Nil child nodes are skipped.
 func Walk(parent ParentNode, walker Walker) (err error) {
 	return walkInContext(parent, parent, walker)
 }
@@ -53,16 +59,22 @@ func walkInContext(context, parent ParentNode, walker Walker) (err error) {
 
 	for i := 0; i < len(children); i++ {
 		child := children[i]
+		if child == nil {
+			// Skip over nil nodes because they're mostly harmless -- you just can't act
+			// on them at all.
+			continue
+		}
 
 		// Remap the child node if the walker implemented WalkMapper
 		if mapper != nil {
-			child, err = mapper.Map(child)
+			var newChild Node
+			newChild, err = mapper.Map(child)
 			if err != nil {
 				return walkErr(parent, context, child, err)
 			}
 
-			// If the new child is nil, remove it from the slice of children
-			if child == nil {
+			// If the new child is nil, remove the original child from the slice of children
+			if newChild == nil {
 				copy(children[i:], children[i+1:])
 				children[len(children)-1] = nil
 				children = children[:len(children)-1]
@@ -70,7 +82,7 @@ func walkInContext(context, parent ParentNode, walker Walker) (err error) {
 				i--
 				continue
 			}
-			children[i] = child
+			children[i] = newChild
 		}
 
 		switch child := child.(type) {
