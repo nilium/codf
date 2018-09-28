@@ -1,10 +1,22 @@
 package codf
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 )
+
+type mapFunc func(Node) (Node, error)
+
+var _ WalkMapper = mapFunc(nil)
+
+func (f mapFunc) Map(n Node) (Node, error) {
+	return f(n)
+}
+
+func (f mapFunc) Statement(*Statement) error            { return nil }
+func (f mapFunc) EnterSection(*Section) (Walker, error) { return f, nil }
 
 type docWalker struct {
 	name       string
@@ -311,5 +323,20 @@ func TestWalkMapper(t *testing.T) {
 
 	if !reflect.DeepEqual(walker.statements, wantStatements) {
 		t.Errorf("statements = %q; want %q", walker.statements, wantStatements)
+	}
+}
+
+func TestMapError(t *testing.T) {
+	const wantErrMessage = `[1:1:0] root.conf: stmt in main: expected error`
+	const DocSource = `stmt 1; section arg {}`
+
+	defer setlogf(t)()
+
+	doc := mustParseNamed(t, "root.conf", DocSource)
+	wantErr := errors.New("expected error")
+	err := Walk(doc, mapFunc(func(Node) (Node, error) { return nil, wantErr }))
+
+	if got := err.Error(); got != wantErrMessage {
+		t.Fatalf("err = %q; want %q", got, wantErrMessage)
 	}
 }
