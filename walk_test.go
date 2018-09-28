@@ -326,6 +326,22 @@ func TestWalkMapper(t *testing.T) {
 	}
 }
 
+func TestMapDelete(t *testing.T) {
+	const DocSource = `stmt 1; section arg {}`
+
+	defer setlogf(t)()
+
+	doc := mustParseNamed(t, "root.conf", DocSource)
+	err := Walk(doc, mapFunc(func(Node) (Node, error) { return nil, nil }))
+	if err != nil {
+		t.Fatalf("err = %v; want nil", err)
+	}
+
+	if got := doc.Children; len(got) != 0 {
+		t.Fatalf("children = %#v; want an empty slice", got)
+	}
+}
+
 func TestMapError(t *testing.T) {
 	const wantErrMessage = `[1:1:0] root.conf: stmt in main: expected error`
 	const DocSource = `stmt 1; section arg {}`
@@ -333,6 +349,8 @@ func TestMapError(t *testing.T) {
 	defer setlogf(t)()
 
 	doc := mustParseNamed(t, "root.conf", DocSource)
+	doc.Children = append([]Node{nil}, doc.Children...)
+
 	wantErr := errors.New("expected error")
 	err := Walk(doc, mapFunc(func(Node) (Node, error) { return nil, wantErr }))
 
