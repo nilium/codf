@@ -82,7 +82,9 @@ func walkInContext(context, parent ParentNode, walker Walker) (err error) {
 				i--
 				continue
 			}
-			children[i] = newChild
+
+			child = newChild
+			children[i] = child
 		}
 
 		switch child := child.(type) {
