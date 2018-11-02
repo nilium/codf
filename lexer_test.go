@@ -183,10 +183,11 @@ func (tt *tokenSeqTest) Run(t *testing.T) {
 func TestComment(t *testing.T) {
 	defer setlogf(t)()
 	tokenSeq{
-		{Token: Token{Kind: TComment, Raw: []byte("")}},
-		{Token: Token{Kind: TComment, Raw: []byte(" foo bar baz")}},
+		{Token: Token{Kind: TComment, Raw: []byte("//")}},
+		{Token: Token{Kind: TWhitespace, Raw: []byte("\n")}},
+		{Token: Token{Kind: TComment, Raw: []byte("// foo bar baz")}},
 		_eof,
-	}.Run(t, "'\n' foo bar baz")
+	}.Run(t, "//\n// foo bar baz")
 }
 
 func TestBareword(t *testing.T) {
@@ -246,7 +247,7 @@ func TestBareword(t *testing.T) {
 		}},
 		_semicolon,
 		_ws,
-		{Token: Token{Kind: TComment, Raw: []byte(" foo")}},
+		{Token: Token{Kind: TComment, Raw: []byte("// foo"), Value: " foo"}},
 		_ws, wordCase("+f"),
 		_ws, wordCase("1/1f"),
 		_ws, wordCase("1nq"),
@@ -256,7 +257,7 @@ func TestBareword(t *testing.T) {
 		quoteCase("foo"),
 		_eof,
 	}.Run(t, "\t.foo$bar#baz=quux\n"+
-		"\t10.0.0.0/8 # #f + -; ' foo\n"+
+		"\t10.0.0.0/8 # #f + -; // foo\n"+
 		"\n"+
 		"+f 1/1f 1nq 1s1.s #foo #\"foo\"",
 	)
@@ -304,7 +305,7 @@ func TestStatement(t *testing.T) {
 		_ws, wordCase("sect"), _ws, _curlopen, _curlclose,
 		_ws, wordCase("a"), _semicolon,
 		_ws, wordCase("b{}"),
-		_ws, wordCase("c'foo"),
+		_ws, wordCase("c//foo"),
 		_ws, _comment,
 		_ws, wordCase("#[foo]"),
 		_ws, wordCase("$[foo]"),
@@ -323,7 +324,7 @@ func TestStatement(t *testing.T) {
 		sect {}
 		a;
 		b{}
-		c'foo 'foo
+		c//foo //foo
 		#[foo] $[foo] ${foo} ${{foo}} ${[foo}] ${foo}} ${foo]]
 		;;
 		`)
@@ -899,6 +900,18 @@ func TestReaderWrapping(t *testing.T) {
 	const path = "_test/simple-file"
 	const noname = "no-name"
 
+	want := tokenSeq{
+		_comment, _ws,
+		_comment, _ws,
+		wordCase("statement"), _ws, wordCase("word"), _semicolon, _ws,
+		_comment, _ws,
+		wordCase("section"), _ws, quoteCase("string"), _ws, _curlopen, _ws,
+		_comment, _ws,
+		wordCase("url"), _ws, wordCase("https://go.spiff.io/codf"), _semicolon, _ws,
+		_curlclose, _ws,
+		_comment,
+	}
+
 	t.Run("File", func(t *testing.T) {
 		fi, err := os.Open(path)
 		if err != nil {
@@ -909,13 +922,7 @@ func TestReaderWrapping(t *testing.T) {
 		lexer := NewLexer(fi)
 		lexer.Name = noname
 
-		tokenSeq{
-			_comment, _ws,
-			wordCase("statement"), _ws, wordCase("word"), _semicolon, _ws,
-			wordCase("section"), _ws, quoteCase("string"), _ws, _curlopen, _ws,
-			_curlclose, _ws,
-			_comment,
-		}.RunWithLexer(t, lexer)
+		want.RunWithLexer(t, lexer)
 
 		if lexer.pos.Name != path {
 			t.Fatalf("lexer.pos.Name = %q; want %q", lexer.pos.Name, path)
@@ -932,13 +939,7 @@ func TestReaderWrapping(t *testing.T) {
 		lexer := NewLexer(struct{ io.Reader }{fi})
 		lexer.Name = "no-name"
 
-		tokenSeq{
-			_comment, _ws,
-			wordCase("statement"), _ws, wordCase("word"), _semicolon, _ws,
-			wordCase("section"), _ws, quoteCase("string"), _ws, _curlopen, _ws,
-			_curlclose, _ws,
-			_comment,
-		}.RunWithLexer(t, lexer)
+		want.RunWithLexer(t, lexer)
 
 		if lexer.pos.Name != noname {
 			t.Fatalf("lexer.pos.Name = %q; want %q", lexer.pos.Name, noname)

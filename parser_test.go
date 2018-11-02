@@ -72,7 +72,7 @@ func TestParseAST(t *testing.T) {
 		},
 		{
 			Name: "EmptyArrayMap",
-			Src:  `foo 1 { bar [] #{}; } map #{} [];' eof`,
+			Src:  `foo 1 { bar [] #{}; } map #{} [];// eof`,
 			Doc: doc().section("foo", 1).
 				statement("bar", []ExprNode{}, mkmap()).
 				up().statement("map", mkmap(), []ExprNode{}).
@@ -80,12 +80,12 @@ func TestParseAST(t *testing.T) {
 		},
 		{
 			Name: "NestedArrayMaps",
-			Src: `foo [' Nested map inside array
-					#{ k [  1       ' integer
-						"2"     ' string
-						three   ' bareword (string)
-						true    ' bool (bareword->bool)
-						` + "`true`" + ` ' raw quote bool
+			Src: `foo [// Nested map inside array
+					#{ k [  1       // integer
+						"2"     // string
+						three   // bareword (string)
+						true    // bool (bareword->bool)
+						` + "`true`" + ` // raw quote bool
 						]
 					   ` + "`raw`" + ` bare
 					}
@@ -121,7 +121,7 @@ func TestParseAST(t *testing.T) {
 					#{} #{k v}
 					[] [v1 v2]
 				{
-					inside Yes YES yes yeS ' Last is always a bareword here
+					inside Yes YES yes yeS // Last is always a bareword here
 						No NO no nO
 						True TRUE true truE
 						False FALSE false falsE;
@@ -159,7 +159,7 @@ func TestParseAST(t *testing.T) {
 		{Fun: mustNotParse, Name: "BadStatementClose", Src: `src`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src {`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src {]`},
-		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src { ' comment`},
+		{Fun: mustNotParse, Name: "BadSectionClose", Src: `src { // comment`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `}`},
 		{Fun: mustNotParse, Name: "BadSectionClose", Src: `]`},
 	}
@@ -177,7 +177,7 @@ func TestParseExample(t *testing.T) {
         strip-x-headers yes;
         log-access no;
     }
-    ' keep caches in 64mb of memory
+    // keep caches in 64mb of memory
     cache memory 64mb {
          expire 10m 404;
          expire 1h  301 302;
@@ -253,12 +253,12 @@ func TestParseExpr(t *testing.T) {
 	cases := []testCase{
 		{
 			name: "QuotedString",
-			in:   `  "quoted string"  ' comment ' `,
+			in:   `  "quoted string"  // comment // `,
 			want: mkexpr("quoted string"),
 		},
 		{
 			name: "Raw String",
-			in:   "  `raw string`  ' comment '",
+			in:   "  `raw string`  // comment //",
 			want: mkexpr("raw string"),
 		},
 		{
@@ -378,12 +378,12 @@ func TestParseExpr(t *testing.T) {
 		},
 		{
 			name:    "SpaceComment",
-			in:      "  \n  ' foobar\n   'bar\n\n\t\n",
+			in:      "  \n  // foobar\n   //bar\n\n\t\n",
 			wantErr: true,
 		},
 		{
 			name:    "Comment",
-			in:      "' comment",
+			in:      "// comment",
 			wantErr: true,
 		},
 		{

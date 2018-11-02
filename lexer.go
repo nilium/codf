@@ -44,7 +44,7 @@ const (
 	// BarewordRune := ![;{}\[\]"'`] Unicode(L,M,N,P,S)
 
 	TWhitespace   // [ \n\r\t]+
-	TComment      // '\'' { !EOL . } ( EOL | EOF )
+	TComment      // '//' { !EOL . } ( EOL | EOF )
 	TWord         // BarewordRune {BarewordRune}
 	TSemicolon    // ';'
 	TCurlOpen     // '{'
@@ -198,7 +198,7 @@ const (
 	rDoubleQuote  = '"'
 	rBackQuote    = '`'
 	rSpecial      = '#'
-	rComment      = '\''
+	rComment      = '/'
 	rDot          = '.'
 	rFracSep      = '/'
 	rBaseSep      = '#'
@@ -485,28 +485,40 @@ func isHex(r rune) bool {
 
 type consumerFunc func(rune) (Token, consumerFunc, error)
 
-func (l *Lexer) lexSpace(next consumerFunc) consumerFunc {
+func (l *Lexer) lexSpace(r rune, next consumerFunc) consumerFunc {
 	var spaceConsumer consumerFunc
+	l.buffer(r, -1)
 	spaceConsumer = func(r rune) (Token, consumerFunc, error) {
 		if !unicode.IsSpace(r) {
 			l.unread()
-			return l.token(TWhitespace, false), next, nil
+			return l.token(TWhitespace, true), next, nil
 		}
+		l.buffer(r, -1)
 		return noToken, spaceConsumer, nil
 	}
 	return spaceConsumer
 }
 
+func (l *Lexer) lexCommentStart(next consumerFunc) consumerFunc {
+	l.buffer(rComment, -1)
+	return func(r rune) (Token, consumerFunc, error) {
+		if r != rComment {
+			l.unread()
+			return l.lexBecomeWord(rComment)
+		}
+		return noToken, l.lexComment(next), nil
+	}
+}
+
 func (l *Lexer) lexComment(next consumerFunc) consumerFunc {
 	var commentConsumer consumerFunc
+	l.buffer(rComment, -1)
 	commentConsumer = func(r rune) (Token, consumerFunc, error) {
 		if r == '\n' || r == eof {
-			if r == eof {
-				l.unread()
-			}
+			l.unread()
 			return l.token(TComment, true), next, nil
 		}
-		l.buffer(r, -1)
+		l.buffer(r, r)
 		return noToken, commentConsumer, nil
 	}
 	return commentConsumer
@@ -520,7 +532,7 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 
 	// Whitespace
 	case unicode.IsSpace(r):
-		return noToken, l.lexSpace(l.lexSegment), nil
+		return noToken, l.lexSpace(r, l.lexSegment), nil
 
 	// Semicolon
 	case r == rSentinel:
@@ -540,7 +552,7 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 
 	// Comment
 	case r == rComment:
-		return noToken, l.lexComment(l.lexSegment), nil
+		return noToken, l.lexCommentStart(l.lexSegment), nil
 
 	// Map / regexp (#// | #{})
 	case r == rSpecial:

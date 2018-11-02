@@ -1,8 +1,12 @@
-' Start
+// Start
 
+// A statement:
 statement word;
 
+// A section
 section "string" {
+	//A comment with no space between the second slash and commentary
+	url https://go.spiff.io/codf;
 }
 
-' End of file
+// End of file
