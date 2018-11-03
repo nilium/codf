@@ -22,6 +22,80 @@ func TestInvalidTokenName(t *testing.T) {
 	}
 }
 
+func regexCase(rx string) tokenCase {
+	return tokenCase{
+		Token: Token{
+			Kind:  TRegexp,
+			Raw:   []byte("#/" + strings.Replace(rx, "/", "\\/", -1) + "/"),
+			Value: regexp.MustCompile(rx),
+		},
+	}
+}
+
+func durCase(text string) tokenCase {
+	d, err := time.ParseDuration(text)
+	if err != nil {
+		panic("error creating duration: " + err.Error())
+	}
+	return tokenCase{
+		Token: Token{
+			Kind:  TDuration,
+			Raw:   []byte(text),
+			Value: d,
+		},
+	}
+}
+
+func floatCase(text string, precision uint) tokenCase {
+	if precision <= 0 {
+		precision = DefaultPrecision
+	}
+	var f big.Float
+	f.SetPrec(precision)
+	if _, ok := f.SetString(text); !ok {
+		panic("error creating float " + text)
+	}
+	return tokenCase{
+		Token: Token{
+			Kind:  TFloat,
+			Raw:   []byte(text),
+			Value: &f,
+		},
+	}
+}
+
+func baseCase(val int64, base int) tokenCase {
+	t := val
+	neg := ""
+	if t < 0 {
+		neg = "-"
+		t = -t
+	}
+	formatted := fmt.Sprintf("%s%d#%s", neg, base, strconv.FormatInt(t, base))
+	return intCase(val, formatted)
+}
+
+func intCase(val int64, raw string) tokenCase {
+	kind := TInteger
+	switch s := strings.ToLower(strings.TrimLeft(raw, "-+")); {
+	case strings.HasPrefix(s, "0x"):
+		kind = THex
+	case strings.HasPrefix(s, "0b"):
+		kind = TBinary
+	case len(s) > 1 && strings.HasPrefix(s, "0"):
+		kind = TOctal
+	case strings.Contains(s, "#"):
+		kind = TBaseInt
+	}
+	return tokenCase{
+		Token: Token{
+			Kind:  kind,
+			Raw:   []byte(raw),
+			Value: big.NewInt(val),
+		},
+	}
+}
+
 func wordCase(word string) tokenCase {
 	return tokenCase{
 		Token: Token{
@@ -134,13 +208,18 @@ var (
 
 type tokenSeq []tokenCase
 
-func (seq tokenSeq) Run(t *testing.T, input string) {
+func (seq tokenSeq) RunFlags(t *testing.T, flags LexerFlag, input string) {
 	buf := reader(input)
 	lex := NewLexer(buf)
+	lex.Flags = flags
 	lex.Name = "test.codf"
 	if seq.RunWithLexer(t, lex) {
 		requireEOF(t, buf)
 	}
+}
+
+func (seq tokenSeq) Run(t *testing.T, input string) {
+	seq.RunFlags(t, LexDefaultFlags, input)
 }
 
 func (seq tokenSeq) RunWithLexer(t *testing.T, lex *Lexer) bool {
@@ -276,17 +355,355 @@ func TestWhitespace(t *testing.T) {
 	}.Run(t, " \n\r\n\t ")
 }
 
-func TestBooleans(t *testing.T) {
-	defer setlogf(t)()
-	// Booleans are lexed as words and converted to boolean tokens by the parser.
-	tokenSeq{
-		{Token: Token{Kind: TWord, Raw: []byte("TRUE"), Value: "TRUE"}},
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("true"), Value: "true"}},
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("Yes"), Value: "Yes"}},
-		_ws, {Token: Token{Kind: TWord, Raw: []byte("FALSE"), Value: "FALSE"}},
-		_ws, _curlopen, _curlclose,
-		_eof,
-	}.Run(t, "TRUE true Yes FALSE {}")
+type flagTest struct {
+	Flags LexerFlag
+	Seq   string
+	On    tokenSeq
+	Off   tokenSeq
+}
+
+func (f flagTest) Test(t *testing.T) {
+	t.Run("On", func(t *testing.T) {
+		defer setlogf(t)()
+		f.On.RunFlags(t, f.Flags, f.Seq)
+	})
+	t.Run("Off", func(t *testing.T) {
+		defer setlogf(t)()
+		f.Off.RunFlags(t, LexDefaultFlags, f.Seq)
+	})
+}
+
+func (f flagTest) WithFlags(flag LexerFlag) flagTest {
+	f.Flags = flag
+	return f
+}
+
+func TestLexNoRegexpsFlag(t *testing.T) {
+	t.Run("Regexp", flagTest{
+		Flags: LexNoRegexps,
+		Seq:   `#/r x/`,
+		On:    tokenSeq{wordCase("#/r"), _ws, wordCase("x/"), _eof},
+		Off:   tokenSeq{regexCase("r x"), _eof},
+	}.Test)
+}
+
+func TestLexNoBooleansFlag(t *testing.T) {
+	flagTest{
+		Flags: LexNoBools,
+		Seq:   `TRUE true Yes FALSE`,
+		On: tokenSeq{
+			{Token: Token{Kind: TWord, Raw: []byte("TRUE"), Value: "TRUE"}},
+			_ws, {Token: Token{Kind: TWord, Raw: []byte("true"), Value: "true"}},
+			_ws, {Token: Token{Kind: TWord, Raw: []byte("Yes"), Value: "Yes"}},
+			_ws, {Token: Token{Kind: TWord, Raw: []byte("FALSE"), Value: "FALSE"}},
+			_eof,
+		},
+		Off: tokenSeq{
+			{Token: Token{Kind: TBoolean, Raw: []byte("TRUE"), Value: true}},
+			_ws, {Token: Token{Kind: TBoolean, Raw: []byte("true"), Value: true}},
+			_ws, {Token: Token{Kind: TBoolean, Raw: []byte("Yes"), Value: true}},
+			_ws, {Token: Token{Kind: TBoolean, Raw: []byte("FALSE"), Value: false}},
+			_eof,
+		},
+	}.Test(t)
+}
+
+func TestLexNoDurationsFlag(t *testing.T) {
+	durations := flagTest{
+		Flags: LexNoDurations,
+		Seq: `
+			-0s -1ns -0ns -0.0s
+			-1h234m7s -1h -60m
+			-0.05s -500ms
+			-0.5ms -500us -500μs
+			+0s +1ns +0ns +0.0s
+			+1h234m7s +1h +60m
+			+0.05s +500ms
+			+0.5ms +500us +500μs
+			0s 1ns 0ns 0.0s
+			1h234m7s 1h 60m
+			0.05s 500ms
+			0.5ms 500us 500μs
+			1h0.25m
+			1h0m0.05s
+		`,
+		On: tokenSeq{
+			// Negative sign
+			_ws, wordCase("-0s"),
+			_ws, wordCase("-1ns"),
+			_ws, wordCase("-0ns"),
+			_ws, wordCase("-0.0s"),
+			_ws, wordCase("-1h234m7s"),
+			_ws, wordCase("-1h"),
+			_ws, wordCase("-60m"),
+			_ws, wordCase("-0.05s"),
+			_ws, wordCase("-500ms"),
+			_ws, wordCase("-0.5ms"),
+			_ws, wordCase("-500us"),
+			_ws, wordCase("-500μs"),
+			// Positive sign
+			_ws, wordCase("+0s"),
+			_ws, wordCase("+1ns"),
+			_ws, wordCase("+0ns"),
+			_ws, wordCase("+0.0s"),
+			_ws, wordCase("+1h234m7s"),
+			_ws, wordCase("+1h"),
+			_ws, wordCase("+60m"),
+			_ws, wordCase("+0.05s"),
+			_ws, wordCase("+500ms"),
+			_ws, wordCase("+0.5ms"),
+			_ws, wordCase("+500us"),
+			_ws, wordCase("+500μs"),
+			// No sign
+			_ws, wordCase("0s"),
+			_ws, wordCase("1ns"),
+			_ws, wordCase("0ns"),
+			_ws, wordCase("0.0s"),
+			_ws, wordCase("1h234m7s"),
+			_ws, wordCase("1h"),
+			_ws, wordCase("60m"),
+			_ws, wordCase("0.05s"),
+			_ws, wordCase("500ms"),
+			_ws, wordCase("0.5ms"),
+			_ws, wordCase("500us"),
+			_ws, wordCase("500μs"),
+			_ws, wordCase("1h0.25m"),
+			_ws, wordCase("1h0m0.05s"),
+			_ws, _eof,
+		},
+		Off: tokenSeq{
+			// Negative sign
+			_ws, durCase("-0s"),
+			_ws, durCase("-1ns"),
+			_ws, durCase("-0ns"),
+			_ws, durCase("-0.0s"),
+			_ws, durCase("-1h234m7s"),
+			_ws, durCase("-1h"),
+			_ws, durCase("-60m"),
+			_ws, durCase("-0.05s"),
+			_ws, durCase("-500ms"),
+			_ws, durCase("-0.5ms"),
+			_ws, durCase("-500us"),
+			_ws, durCase("-500μs"),
+			// Positive sign
+			_ws, durCase("+0s"),
+			_ws, durCase("+1ns"),
+			_ws, durCase("+0ns"),
+			_ws, durCase("+0.0s"),
+			_ws, durCase("+1h234m7s"),
+			_ws, durCase("+1h"),
+			_ws, durCase("+60m"),
+			_ws, durCase("+0.05s"),
+			_ws, durCase("+500ms"),
+			_ws, durCase("+0.5ms"),
+			_ws, durCase("+500us"),
+			_ws, durCase("+500μs"),
+			// No sign
+			_ws, durCase("0s"),
+			_ws, durCase("1ns"),
+			_ws, durCase("0ns"),
+			_ws, durCase("0.0s"),
+			_ws, durCase("1h234m7s"),
+			_ws, durCase("1h"),
+			_ws, durCase("60m"),
+			_ws, durCase("0.05s"),
+			_ws, durCase("500ms"),
+			_ws, durCase("0.5ms"),
+			_ws, durCase("500us"),
+			_ws, durCase("500μs"),
+			_ws, durCase("1h0.25m"),
+			_ws, durCase("1h0m0.05s"),
+			_ws, _eof,
+		},
+	}
+
+	durations.Test(t)
+	t.Run("NoNumbers-Durations", durations.WithFlags(LexNoNumbers).Test)
+}
+
+func TestLexNoRationalsFlag(t *testing.T) {
+	var (
+		rZero = big.NewRat(0, 1)
+		rNeg  = big.NewRat(-3, 4)
+		rPos  = big.NewRat(3, 4)
+	)
+
+	rationals := flagTest{
+		Flags: LexNoRationals,
+		Seq: `
+			 0/100 -0/200 -0/1 0/1
+			-3/4 -6/8 -75/100
+			+3/4 +6/8 +75/100
+			 3/4 6/8 75/100
+		`,
+		On: tokenSeq{
+			// Zero
+			_ws, wordCase("0/100"),
+			_ws, wordCase("-0/200"),
+			_ws, wordCase("-0/1"),
+			_ws, wordCase("0/1"),
+			// Negative sign
+			_ws, wordCase("-3/4"),
+			_ws, wordCase("-6/8"),
+			_ws, wordCase("-75/100"),
+			// Positive sign
+			_ws, wordCase("+3/4"),
+			_ws, wordCase("+6/8"),
+			_ws, wordCase("+75/100"),
+			// No sign
+			_ws, wordCase("3/4"),
+			_ws, wordCase("6/8"),
+			_ws, wordCase("75/100"),
+			_ws, _eof,
+		},
+		Off: tokenSeq{
+			// Zero
+			_ws, {Token: Token{Kind: TRational, Value: rZero, Raw: []byte("0/100")}},
+			_ws, {Token: Token{Kind: TRational, Value: rZero, Raw: []byte("-0/200")}},
+			_ws, {Token: Token{Kind: TRational, Value: rZero, Raw: []byte("-0/1")}},
+			_ws, {Token: Token{Kind: TRational, Value: rZero, Raw: []byte("0/1")}},
+			// Negative sign
+			_ws, {Token: Token{Kind: TRational, Value: rNeg, Raw: []byte("-3/4")}},
+			_ws, {Token: Token{Kind: TRational, Value: rNeg, Raw: []byte("-6/8")}},
+			_ws, {Token: Token{Kind: TRational, Value: rNeg, Raw: []byte("-75/100")}},
+			// Positive sign
+			_ws, {Token: Token{Kind: TRational, Value: rPos, Raw: []byte("+3/4")}},
+			_ws, {Token: Token{Kind: TRational, Value: rPos, Raw: []byte("+6/8")}},
+			_ws, {Token: Token{Kind: TRational, Value: rPos, Raw: []byte("+75/100")}},
+			// No sign
+			_ws, {Token: Token{Kind: TRational, Value: rPos, Raw: []byte("3/4")}},
+			_ws, {Token: Token{Kind: TRational, Value: rPos, Raw: []byte("6/8")}},
+			_ws, {Token: Token{Kind: TRational, Value: rPos, Raw: []byte("75/100")}},
+			_ws, _eof,
+		},
+	}
+
+	rationals.Test(t)
+	t.Run("NoNumbers-Rationals", rationals.WithFlags(LexNoNumbers).Test)
+}
+
+func TestLexNoFloatsFlag(t *testing.T) {
+	floats := flagTest{
+		Flags: LexNoFloats,
+		Seq: `
+			-0.0 -0.5 -0.0e0 -0.0E0
+			-1.2345 -12345e-4 -1.2345e4 -1.2345e+4
+			+0.0 +0.5 +0.0e0 +0.0E0
+			+1.2345 +12345E-4 +1.2345E4 +1.2345E+4
+			[0.0] #{k 0.5} 0e123 0.0e0 0.0E0
+			1.2345 12345e-4 1.2345e4 1.2345e+4
+		`,
+		On: tokenSeq{
+			// Negative sign
+			_ws, wordCase("-0.0"),
+			_ws, wordCase("-0.5"),
+			_ws, wordCase("-0.0e0"),
+			_ws, wordCase("-0.0E0"),
+			_ws, wordCase("-1.2345"),
+			_ws, wordCase("-12345e-4"),
+			_ws, wordCase("-1.2345e4"),
+			_ws, wordCase("-1.2345e+4"),
+			// Positive sign
+			_ws, wordCase("+0.0"),
+			_ws, wordCase("+0.5"),
+			_ws, wordCase("+0.0e0"),
+			_ws, wordCase("+0.0E0"),
+			_ws, wordCase("+1.2345"),
+			_ws, wordCase("+12345E-4"),
+			_ws, wordCase("+1.2345E4"),
+			_ws, wordCase("+1.2345E+4"),
+			// No sign
+			_ws, _bracketopen, wordCase("0.0"), _bracketclose,
+			_ws, _mapopen,
+			{Token: Token{Kind: TWord, Value: "k"}},
+			_ws, wordCase("0.5"),
+			_curlclose,
+			_ws, wordCase("0e123"),
+			_ws, wordCase("0.0e0"),
+			_ws, wordCase("0.0E0"),
+			_ws, wordCase("1.2345"),
+			_ws, wordCase("12345e-4"),
+			_ws, wordCase("1.2345e4"),
+			_ws, wordCase("1.2345e+4"),
+			_ws, _eof,
+		},
+		Off: tokenSeq{
+			// Negative sign
+			_ws, floatCase("-0.0", 0),
+			_ws, floatCase("-0.5", 0),
+			_ws, floatCase("-0.0e0", 0),
+			_ws, floatCase("-0.0E0", 0),
+			_ws, floatCase("-1.2345", 0),
+			_ws, floatCase("-12345e-4", 0),
+			_ws, floatCase("-1.2345e4", 0),
+			_ws, floatCase("-1.2345e+4", 0),
+			// Positive sign
+			_ws, floatCase("+0.0", 0),
+			_ws, floatCase("+0.5", 0),
+			_ws, floatCase("+0.0e0", 0),
+			_ws, floatCase("+0.0E0", 0),
+			_ws, floatCase("+1.2345", 0),
+			_ws, floatCase("+12345E-4", 0),
+			_ws, floatCase("+1.2345E4", 0),
+			_ws, floatCase("+1.2345E+4", 0),
+			// No sign
+			_ws, _bracketopen, floatCase("0.0", 0), _bracketclose,
+			_ws, _mapopen,
+			{Token: Token{Kind: TWord, Value: "k"}},
+			_ws, floatCase("0.5", 0),
+			_curlclose,
+			_ws, floatCase("0e123", 0),
+			_ws, floatCase("0.0e0", 0),
+			_ws, floatCase("0.0E0", 0),
+			_ws, floatCase("1.2345", 0),
+			_ws, floatCase("12345e-4", 0),
+			_ws, floatCase("1.2345e4", 0),
+			_ws, floatCase("1.2345e+4", 0),
+			_ws, _eof,
+		},
+	}
+
+	floats.Test(t)
+	t.Run("NoNumbers-Floats", floats.WithFlags(LexNoNumbers).Test)
+}
+
+func TestLexNoBaseIntsFlag(t *testing.T) {
+	baseInts := flagTest{
+		Seq: `
+			0xff 0XFF
+			0b1111 0B1111
+			0600 0000 -0600
+			3#210 -3#210
+		`,
+		Flags: LexNoBaseInts,
+		On: tokenSeq{
+			_ws, wordCase("0xff"),
+			_ws, wordCase("0XFF"),
+			_ws, wordCase("0b1111"),
+			_ws, wordCase("0B1111"),
+			_ws, wordCase("0600"),
+			_ws, wordCase("0000"),
+			_ws, wordCase("-0600"),
+			_ws, wordCase("3#210"),
+			_ws, wordCase("-3#210"),
+			_ws, _eof,
+		},
+		Off: tokenSeq{
+			_ws, intCase(255, "0xff"),
+			_ws, intCase(255, "0XFF"),
+			_ws, intCase(15, "0b1111"),
+			_ws, intCase(15, "0B1111"),
+			_ws, intCase(384, "0600"),
+			_ws, intCase(0, "0000"),
+			_ws, intCase(-384, "-0600"),
+			_ws, intCase(21, "3#210"),
+			_ws, intCase(-21, "-3#210"),
+			_ws, _eof,
+		},
+	}
+
+	baseInts.Test(t)
+	t.Run("NoNumbers-BaseInt", baseInts.WithFlags(LexNoNumbers).Test)
 }
 
 func TestStatement(t *testing.T) {
@@ -358,6 +775,13 @@ func TestRegexp(t *testing.T) {
 		_semicolon,
 		_eof,
 	}.Run(t, "stmt #/foo\\/bar\n/ #// #/\\./;")
+
+	// Test that regexp lexing is disabled
+	tokenSeq{
+		wordCase("#//"), _ws,
+		wordCase("#/foo"), _ws,
+		wordCase("bar/"),
+	}.RunFlags(t, LexNoRegexps, "#// #/foo bar/")
 
 	// Fail on EOF at points in regexp parsing
 	// EOF in regexp (start)
@@ -644,19 +1068,10 @@ func TestRationals(t *testing.T) {
 		_ws, _semicolon,
 		_eof,
 	}.Run(t, `stmt
-			 0/100
-			-0/200
-			-0/1
-			 0/1
-			-3/4
-			-6/8
-			-75/100
-			+3/4
-			+6/8
-			+75/100
-			 3/4
-			 6/8
-			 75/100
+			 0/100 -0/200 -0/1 0/1
+			-3/4 -6/8 -75/100
+			+3/4 +6/8 +75/100
+			 3/4 6/8 75/100
 		;`)
 
 	// Zero denominator -> error
@@ -693,55 +1108,41 @@ func TestLocationString(t *testing.T) {
 
 func TestFloats(t *testing.T) {
 	defer setlogf(t)()
-	dec := func(text string) tokenCase {
-		var f big.Float
-		f.SetPrec(DefaultPrecision)
-		if _, ok := f.SetString(text); !ok {
-			panic("error creating float " + text)
-		}
-		return tokenCase{
-			Token: Token{
-				Kind:  TFloat,
-				Raw:   []byte(text),
-				Value: &f,
-			},
-		}
-	}
 
 	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
 	tokenSeq{
 		_stmt,
 		// Negative sign
-		_ws, dec("-0.0"),
-		_ws, dec("-0.5"),
-		_ws, dec("-0.0e0"),
-		_ws, dec("-0.0E0"),
-		_ws, dec("-1.2345"),
-		_ws, dec("-12345e-4"),
-		_ws, dec("-1.2345e4"),
-		_ws, dec("-1.2345e+4"),
+		_ws, floatCase("-0.0", 0),
+		_ws, floatCase("-0.5", 0),
+		_ws, floatCase("-0.0e0", 0),
+		_ws, floatCase("-0.0E0", 0),
+		_ws, floatCase("-1.2345", 0),
+		_ws, floatCase("-12345e-4", 0),
+		_ws, floatCase("-1.2345e4", 0),
+		_ws, floatCase("-1.2345e+4", 0),
 		// Positive sign
-		_ws, dec("+0.0"),
-		_ws, dec("+0.5"),
-		_ws, dec("+0.0e0"),
-		_ws, dec("+0.0E0"),
-		_ws, dec("+1.2345"),
-		_ws, dec("+12345E-4"),
-		_ws, dec("+1.2345E4"),
-		_ws, dec("+1.2345E+4"),
+		_ws, floatCase("+0.0", 0),
+		_ws, floatCase("+0.5", 0),
+		_ws, floatCase("+0.0e0", 0),
+		_ws, floatCase("+0.0E0", 0),
+		_ws, floatCase("+1.2345", 0),
+		_ws, floatCase("+12345E-4", 0),
+		_ws, floatCase("+1.2345E4", 0),
+		_ws, floatCase("+1.2345E+4", 0),
 		// No sign
-		_ws, _bracketopen, dec("0.0"), _bracketclose,
+		_ws, _bracketopen, floatCase("0.0", 0), _bracketclose,
 		_ws, _mapopen,
 		{Token: Token{Kind: TWord, Value: "k"}},
-		_ws, dec("0.5"),
+		_ws, floatCase("0.5", 0),
 		_curlclose,
-		_ws, dec("0e123"),
-		_ws, dec("0.0e0"),
-		_ws, dec("0.0E0"),
-		_ws, dec("1.2345"),
-		_ws, dec("12345e-4"),
-		_ws, dec("1.2345e4"),
-		_ws, dec("1.2345e+4"),
+		_ws, floatCase("0e123", 0),
+		_ws, floatCase("0.0e0", 0),
+		_ws, floatCase("0.0E0", 0),
+		_ws, floatCase("1.2345", 0),
+		_ws, floatCase("12345e-4", 0),
+		_ws, floatCase("1.2345e4", 0),
+		_ws, floatCase("1.2345e+4", 0),
 		_ws, _semicolon,
 		_eof,
 	}.Run(t, `stmt
@@ -783,20 +1184,6 @@ func TestFloats(t *testing.T) {
 func TestDurations(t *testing.T) {
 	defer setlogf(t)()
 
-	dur := func(text string) tokenCase {
-		d, err := time.ParseDuration(text)
-		if err != nil {
-			panic("error creating duration: " + err.Error())
-		}
-		return tokenCase{
-			Token: Token{
-				Kind:  TDuration,
-				Raw:   []byte(text),
-				Value: d,
-			},
-		}
-	}
-
 	_stmt := tokenCase{Token: Token{Kind: TWord, Raw: []byte("stmt"), Value: "stmt"}}
 
 	t.Run("Valid", func(t *testing.T) {
@@ -804,46 +1191,46 @@ func TestDurations(t *testing.T) {
 		tokenSeq{
 			_stmt,
 			// Negative sign
-			_ws, dur("-0s"),
-			_ws, dur("-1ns"),
-			_ws, dur("-0ns"),
-			_ws, dur("-0.0s"),
-			_ws, dur("-1h234m7s"),
-			_ws, dur("-1h"),
-			_ws, dur("-60m"),
-			_ws, dur("-0.05s"),
-			_ws, dur("-500ms"),
-			_ws, dur("-0.5ms"),
-			_ws, dur("-500us"),
-			_ws, dur("-500μs"),
+			_ws, durCase("-0s"),
+			_ws, durCase("-1ns"),
+			_ws, durCase("-0ns"),
+			_ws, durCase("-0.0s"),
+			_ws, durCase("-1h234m7s"),
+			_ws, durCase("-1h"),
+			_ws, durCase("-60m"),
+			_ws, durCase("-0.05s"),
+			_ws, durCase("-500ms"),
+			_ws, durCase("-0.5ms"),
+			_ws, durCase("-500us"),
+			_ws, durCase("-500μs"),
 			// Positive sign
-			_ws, dur("+0s"),
-			_ws, dur("+1ns"),
-			_ws, dur("+0ns"),
-			_ws, dur("+0.0s"),
-			_ws, dur("+1h234m7s"),
-			_ws, dur("+1h"),
-			_ws, dur("+60m"),
-			_ws, dur("+0.05s"),
-			_ws, dur("+500ms"),
-			_ws, dur("+0.5ms"),
-			_ws, dur("+500us"),
-			_ws, dur("+500μs"),
+			_ws, durCase("+0s"),
+			_ws, durCase("+1ns"),
+			_ws, durCase("+0ns"),
+			_ws, durCase("+0.0s"),
+			_ws, durCase("+1h234m7s"),
+			_ws, durCase("+1h"),
+			_ws, durCase("+60m"),
+			_ws, durCase("+0.05s"),
+			_ws, durCase("+500ms"),
+			_ws, durCase("+0.5ms"),
+			_ws, durCase("+500us"),
+			_ws, durCase("+500μs"),
 			// No sign
-			_ws, dur("0s"),
-			_ws, dur("1ns"),
-			_ws, dur("0ns"),
-			_ws, dur("0.0s"),
-			_ws, dur("1h234m7s"),
-			_ws, dur("1h"),
-			_ws, dur("60m"),
-			_ws, dur("0.05s"),
-			_ws, dur("500ms"),
-			_ws, dur("0.5ms"),
-			_ws, dur("500us"),
-			_ws, dur("500μs"),
-			_ws, dur("1h0.25m"),
-			_ws, dur("1h0m0.05s"),
+			_ws, durCase("0s"),
+			_ws, durCase("1ns"),
+			_ws, durCase("0ns"),
+			_ws, durCase("0.0s"),
+			_ws, durCase("1h234m7s"),
+			_ws, durCase("1h"),
+			_ws, durCase("60m"),
+			_ws, durCase("0.05s"),
+			_ws, durCase("500ms"),
+			_ws, durCase("0.5ms"),
+			_ws, durCase("500us"),
+			_ws, durCase("500μs"),
+			_ws, durCase("1h0.25m"),
+			_ws, durCase("1h0m0.05s"),
 			_ws, _semicolon,
 			_eof,
 		}.Run(t, `stmt
@@ -945,4 +1332,23 @@ func TestReaderWrapping(t *testing.T) {
 			t.Fatalf("lexer.pos.Name = %q; want %q", lexer.pos.Name, noname)
 		}
 	})
+}
+
+func TestLexerPrecision(t *testing.T) {
+	seq := `1.234`
+	cases := map[string]uint{
+		"DefaultPrecision": 0,
+		"HighPrecision":    240,
+		"32bit":            32,
+	}
+
+	for name, prec := range cases {
+		prec := prec
+		t.Run(name, func(t *testing.T) {
+			defer setlogf(t)()
+			l := NewLexer(strings.NewReader(seq))
+			l.Precision = prec
+			tokenSeq{floatCase(seq, prec)}.RunWithLexer(t, l)
+		})
+	}
 }

@@ -324,10 +324,6 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 		TBoolean,
 		TRegexp:
 
-		if tok.Kind == TWord {
-			tok = wordToBool(tok)
-		}
-
 		if err := p.context().(segmentNode).addExpr(&Literal{tok}); err != nil {
 			return nil, err
 		}
@@ -414,21 +410,4 @@ func (e *exprParser) addExpr(expr ExprNode) error {
 	}
 	e.expr = expr
 	return nil
-}
-
-func wordToBool(tok Token) Token {
-	if tok.Kind != TWord {
-		return tok
-	}
-	s, ok := tok.Value.(string)
-	if !ok {
-		return tok
-	}
-	switch s {
-	case "TRUE", "True", "true", "YES", "Yes", "yes":
-		tok.Kind, tok.Value = TBoolean, true
-	case "FALSE", "False", "false", "NO", "No", "no":
-		tok.Kind, tok.Value = TBoolean, false
-	}
-	return tok
 }
