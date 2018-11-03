@@ -206,6 +206,9 @@ const (
 	rRegexpClose  = '/'
 )
 
+// LexerFlag is a bitset representing a combination of zero or more Lex flags, such as LexNoRegexps,
+// LexWordLiterals, and others. These Lex flags affect the Lexer's output, allowing one to disable
+// specific tokenization behavior.
 type LexerFlag uint64
 
 const (
