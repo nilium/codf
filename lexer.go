@@ -206,6 +206,53 @@ const (
 	rRegexpClose  = '/'
 )
 
+type LexerFlag uint64
+
+const (
+	// LexDefaultFlags is the empty flag set (the default).
+	LexDefaultFlags LexerFlag = 0
+
+	// LexWordLiterals treats all literals, other than strings and compounds (maps, arrays) as
+	// words. This is the union of LexNo* flags.
+	LexWordLiterals = LexNoRegexps |
+		LexNoBools |
+		LexNoDurations |
+		LexNoRationals |
+		LexNoFloats |
+		LexNoBaseInts |
+		LexNoNumbers
+)
+
+const (
+	// LexNoRegexps disables regular expressions.
+	LexNoRegexps LexerFlag = 1 << iota
+	// LexNoBools disables true/false/yes/no parsing.
+	LexNoBools
+	// LexNoDurations disables durations.
+	LexNoDurations
+	// LexNoRationals disables rationals.
+	LexNoRationals
+	// LexNoFloats disables floating point numbers.
+	LexNoFloats
+	// LexNoBaseInts disables non-base-10 number forms.
+	LexNoBaseInts
+	// LexNoNumbers disables all numbers.
+	// Implies NoBaseInts, NoFloats, NoRationals, and NoDurations
+	LexNoNumbers
+)
+
+func (f LexerFlag) none(bits LexerFlag) bool {
+	return f&bits == 0
+}
+
+func (f LexerFlag) any(bits LexerFlag) bool {
+	return f&bits != 0
+}
+
+func (f LexerFlag) all(bits LexerFlag) bool {
+	return f&bits == bits
+}
+
 // Lexer takes an input sequence of runes and constructs Tokens from it.
 type Lexer struct {
 	// Precision is the precision used in *big.Float when taking the actual value of a TFloat
@@ -217,6 +264,9 @@ type Lexer struct {
 	// If the scanner provided to the Lexer implements NamedScanner, the scanner's name takes
 	// priority.
 	Name string
+
+	// Flags is a set of Lex flags that can be used to change lexer behavior.
+	Flags LexerFlag
 
 	scanner io.RuneReader
 
@@ -238,8 +288,10 @@ func NewLexer(r io.Reader) *Lexer {
 	rr := runeReader(r)
 
 	le := &Lexer{
-		scanner: rr,
-		pos:     Location{Line: 1, Column: 1},
+		Precision: DefaultPrecision,
+		Flags:     LexDefaultFlags,
+		scanner:   rr,
+		pos:       Location{Line: 1, Column: 1},
 	}
 	return le
 }
@@ -557,8 +609,11 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 	// Map / regexp (#// | #{})
 	case r == rSpecial:
 		return noToken, l.lexSpecial, nil
+	}
 
 	// Numerics (integer, decimal, rational, duration)
+	switch {
+	case l.Flags.any(LexNoNumbers):
 	case isSign(r):
 		l.buffer(r, r)
 		return noToken, l.lexSignedNumber, nil
@@ -568,17 +623,20 @@ func (l *Lexer) lexSegment(r rune) (Token, consumerFunc, error) {
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexNonZero, nil
+	}
 
 	// String
-	case r == rDoubleQuote:
+	switch r {
+	case rDoubleQuote:
 		l.buffer(r, -1)
 		return noToken, l.lexString, nil
-	case r == rBackQuote:
+	case rBackQuote:
 		l.buffer(r, -1)
 		return noToken, l.lexRawString, nil
+	}
 
 	// Word
-	case isBarewordRune(r):
+	if isBarewordRune(r) {
 		return l.lexBecomeWord(r)
 	}
 	return noToken, nil, fmt.Errorf("unexpected character %q at %v", r, l.pos)
@@ -604,8 +662,13 @@ func (l *Lexer) lexWordTail(next consumerFunc) consumerFunc {
 			return noToken, wordConsumer, nil
 		}
 		l.unread()
+
 		tok := l.token(TWord, true)
 		tok.Value = string(tok.Raw)
+		if l.Flags.none(LexNoBools) {
+			tok = wordToBool(tok)
+		}
+
 		return tok, next, nil
 	}
 	return wordConsumer
@@ -631,7 +694,7 @@ func (l *Lexer) lexSegmentTail(r rune) (Token, consumerFunc, error) {
 
 func (l *Lexer) lexSignedNumber(r rune) (Token, consumerFunc, error) {
 	switch {
-	case isDecimal(r):
+	case l.Flags.none(LexNoNumbers) && isDecimal(r):
 		l.buffer(r, r)
 		if r == '0' {
 			return noToken, l.lexZero, nil
@@ -889,17 +952,24 @@ func (l *Lexer) lexFloatPoint(r rune) (Token, consumerFunc, error) {
 	// Sep          -> Float
 	// BarewordRune -> lex bareword
 	//
+	var (
+		allowFloat     = l.Flags.none(LexNoFloats)
+		allowDurations = l.Flags.none(LexNoDurations)
+	)
 	switch {
-	case r == 'E' || r == 'e': // exponent
+	case allowFloat && (r == 'E' || r == 'e'): // exponent
 		l.buffer(r, r)
 		return noToken, l.lexFloatExponentUnsigned, nil
-	case isIntervalInitial(r):
+	case allowDurations && isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexFloatPoint, nil
 	case isStatementSep(r) || r == eof:
 		l.unread()
+		if !allowFloat {
+			return l.lexBecomeWord(-1)
+		}
 		tok, err := l.valueToken(TFloat, parseBigFloat(l.Precision))
 		return tok, l.lexSegment, err
 	case isBarewordTransition(r):
@@ -1070,29 +1140,33 @@ func (l *Lexer) lexZero(r rune) (Token, consumerFunc, error) {
 	// 'Ee'         -> lex float from exponent (necessarily zero)
 	// BarewordRune -> lex bareword
 	//
-	switch {
+	switch allowBaseInts := l.Flags.none(LexNoBaseInts); {
 	case isStatementSep(r), r == -1:
 		l.unread()
 		tok, err := l.valueToken(TInteger, parseBaseInt(10))
 		return tok, l.lexSegment, err
 	case isOctal(r):
+		if !allowBaseInts {
+			return l.lexBecomeWord(r)
+		}
 		l.buffer(r, r)
 		return noToken, l.lexOctalNumber, nil
-	case r == rFracSep:
+	case l.Flags.none(LexNoRationals) && r == rFracSep:
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomInitial, nil
-	case r == 'b' || r == 'B':
+	case allowBaseInts && (r == 'b' || r == 'B'):
 		l.buffer(r, -1)
 		return noToken, l.lexNoTerminate(l.lexBinNum, "binary digit"), nil
-	case r == 'x' || r == 'X':
+	case allowBaseInts && (r == 'x' || r == 'X'):
 		l.buffer(r, -1)
 		return noToken, l.lexNoTerminate(l.lexHexNum, "hex digit"), nil
-	case r == rDot:
+	case !l.Flags.all(LexNoDurations|LexNoFloats) && r == rDot:
+		// Continue parsing here unless both floats and durations are disabled
 		l.buffer(r, r)
 		return noToken, l.lexFloatPointInitial, nil
-	case isIntervalInitial(r):
+	case l.Flags.none(LexNoDurations) && isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
-	case r == 'E' || r == 'e':
+	case l.Flags.none(LexNoFloats) && (r == 'E' || r == 'e'):
 		l.buffer(r, r)
 		return noToken, l.lexFloatExponentUnsigned, nil
 	case isBarewordTransition(r):
@@ -1123,12 +1197,12 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 	case isDecimal(r):
 		l.buffer(r, r)
 		return noToken, l.lexNonZero, nil
-	case isIntervalInitial(r):
+	case l.Flags.none(LexNoDurations) && isIntervalInitial(r):
 		return l.lexIntervalConsumer(r)
 	}
 
-	switch r {
-	case rBaseSep:
+	switch {
+	case l.Flags.none(LexNoBaseInts) && r == rBaseSep:
 		l.buffer(r, -1)
 
 		str := l.strbuf.String()
@@ -1143,13 +1217,13 @@ func (l *Lexer) lexNonZero(r rune) (Token, consumerFunc, error) {
 
 		l.strbuf.Reset()
 		return noToken, l.lexBaseNumber(neg, base), nil
-	case rFracSep:
+	case l.Flags.none(LexNoRationals) && r == rFracSep:
 		l.buffer(r, r)
 		return noToken, l.lexRationalDenomInitial, nil
-	case rDot:
+	case !l.Flags.all(LexNoDurations|LexNoFloats) && r == rDot:
 		l.buffer(r, r)
 		return noToken, l.lexFloatPointInitial, nil
-	case 'E', 'e':
+	case l.Flags.none(LexNoFloats) && (r == 'E' || r == 'e'):
 		l.buffer(r, r)
 		return noToken, l.lexFloatExponentUnsigned, nil
 	}
@@ -1375,7 +1449,7 @@ func (l *Lexer) lexSpecial(r rune) (Token, consumerFunc, error) {
 	switch {
 	case r == rCurlOpen:
 		return l.token(TMapOpen, false), l.lexSegment, nil
-	case r == rRegexpOpen:
+	case r == rRegexpOpen && l.Flags.none(LexNoRegexps):
 		l.buffer(rSpecial, -1)
 		l.buffer(r, -1)
 		return noToken, l.lexRegexp, nil
@@ -1430,4 +1504,21 @@ func (l *Lexer) lexRegexp(r rune) (Token, consumerFunc, error) {
 	}
 	l.buffer(r, r)
 	return noToken, l.lexRegexp, nil
+}
+
+func wordToBool(tok Token) Token {
+	if tok.Kind != TWord {
+		return tok
+	}
+	s, ok := tok.Value.(string)
+	if !ok {
+		return tok
+	}
+	switch s {
+	case "TRUE", "True", "true", "YES", "Yes", "yes":
+		tok.Kind, tok.Value = TBoolean, true
+	case "FALSE", "False", "false", "NO", "No", "no":
+		tok.Kind, tok.Value = TBoolean, false
+	}
+	return tok
 }
