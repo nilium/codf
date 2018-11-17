@@ -13,7 +13,7 @@
 //             strip-x-headers yes;
 //             log-access no;
 //         }
-//         ' keep caches in 64mb of memory
+//         // keep caches in 64mb of memory
 //         cache memory 64mb {
 //              expire 10m 404;
 //              expire 1h  301 302;
