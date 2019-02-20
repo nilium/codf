@@ -15,6 +15,19 @@ type TokenReader interface {
 	ReadToken() (Token, error)
 }
 
+// ParseFlags is a bitset of any boolean flags that can be set for a Parser.
+type ParseFlags uint
+
+func (f ParseFlags) isSet(flags ParseFlags) bool {
+	return f&flags == flags
+}
+
+const (
+	// Whether to treat an end-of-line (newline) as a sentinel. This is the same as using
+	// newlines instead of semicolons.
+	ParseSentinelEOL ParseFlags = 1 << iota
+)
+
 // Parser consumes tokens from a TokenReader and constructs a codf *Document from it.
 //
 // The Document produced by the Parser is kept for the duration of the parser's lifetime, so it is
@@ -22,6 +35,8 @@ type TokenReader interface {
 type Parser struct {
 	doc  *Document
 	next tokenConsumer
+
+	flags ParseFlags
 
 	lastToken Token
 	lastErr   error
@@ -47,6 +62,16 @@ func NewParser() *Parser {
 	p.ctx = p._ctx[:0]
 
 	return p
+}
+
+// Flags returns the current ParseFlags for the receiver.
+func (p *Parser) Flags() ParseFlags {
+	return p.flags
+}
+
+// SetFlags sets the ParseFlags for the receiver.
+func (p *Parser) SetFlags(flags ParseFlags) {
+	p.flags = flags
 }
 
 func (p *Parser) nextToken(tr TokenReader) (tok Token, err error) {
@@ -107,7 +132,7 @@ func (p *Parser) ParseExpr(tr TokenReader) (ExprNode, error) {
 	exp := exprParser{}
 	p.ctx = []parseNode{&exp}
 	p.parseErr = nil
-	p.next = skipWhitespace(p.parseStatement)
+	p.next = p.skipInsignificantWhitespace(p.parseStatement)
 	if err := p.Parse(tr); err != nil {
 		return nil, err
 	}
@@ -220,7 +245,7 @@ func (p *Parser) beginSegment(tok Token) (tokenConsumer, error) {
 		// Start statement
 		stmt := &Statement{NameTok: &Literal{tok}}
 		p.pushContext(stmt)
-		return skipWhitespace(p.parseStatement), nil
+		return p.skipInsignificantWhitespace(p.parseStatement), nil
 	}
 	return nil, unexpected(tok, "expected statement or section name")
 }
@@ -236,9 +261,33 @@ func skipWhitespace(next tokenConsumer) (consumer tokenConsumer) {
 	return consumer
 }
 
+func (p *Parser) skipInsignificantWhitespace(next tokenConsumer) (consumer tokenConsumer) {
+	if !p.flags.isSet(ParseSentinelEOL) {
+		return skipWhitespace(next)
+	}
+	consumer = func(tok Token) (tokenConsumer, error) {
+		if tok.Kind == TWhitespace && tok.Start.Line == tok.End.Line {
+			return consumer, nil
+		} else if tok.Kind == TComment {
+			return consumer, nil
+		}
+		return next(tok)
+	}
+	return consumer
+}
+
 func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 	switch tok.Kind {
 	case TEOF:
+		return nil, p.closeError(tok)
+
+	case TWhitespace:
+		if stmt, ok := p.context().(*Statement); ok {
+			p.popContext()
+			stmt.EndTok = tok
+			p.context().(parentNode).addChild(stmt)
+			return p.beginSegment, nil
+		}
 		return nil, p.closeError(tok)
 
 	case TSemicolon:
@@ -257,7 +306,7 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 			if err := p.context().(segmentNode).addExpr(ary); err != nil {
 				return nil, err
 			}
-			return skipWhitespace(p.parseStatement), nil
+			return p.skipInsignificantWhitespace(p.parseStatement), nil
 		}
 		return nil, p.closeError(tok)
 
@@ -272,7 +321,7 @@ func (p *Parser) parseStatementSentinel(tok Token) (tokenConsumer, error) {
 			if err := p.context().(segmentNode).addExpr(m); err != nil {
 				return nil, err
 			}
-			return skipWhitespace(p.parseStatement), nil
+			return p.skipInsignificantWhitespace(p.parseStatement), nil
 		}
 		return nil, p.closeError(tok)
 
@@ -294,14 +343,14 @@ func (p *Parser) beginArray(tok Token) (tokenConsumer, error) {
 		StartTok: tok,
 		Elems:    []ExprNode{},
 	})
-	return skipWhitespace(p.parseStatement), nil
+	return p.skipInsignificantWhitespace(p.parseStatement), nil
 }
 
 func (p *Parser) beginMap(tok Token) (tokenConsumer, error) {
 	m := newMapBuilder()
 	m.m.StartTok = tok
 	p.pushContext(m)
-	return skipWhitespace(p.parseStatement), nil
+	return p.skipInsignificantWhitespace(p.parseStatement), nil
 }
 
 func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
@@ -327,7 +376,7 @@ func (p *Parser) parseStatement(tok Token) (tokenConsumer, error) {
 		if err := p.context().(segmentNode).addExpr(&Literal{tok}); err != nil {
 			return nil, err
 		}
-		return skipWhitespace(p.parseStatement), nil
+		return p.skipInsignificantWhitespace(p.parseStatement), nil
 	}
 
 	return p.parseStatementSentinel(tok)

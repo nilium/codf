@@ -7,18 +7,30 @@ import (
 	"time"
 )
 
-func parse(in string) (*Document, error) {
+type configFunc func(*Lexer, *Parser)
+
+func parserSetSentinelEOL(_ *Lexer, p *Parser) {
+	p.SetFlags(ParseSentinelEOL)
+	if p.Flags()&ParseSentinelEOL != ParseSentinelEOL {
+		panic("unable to set ParseSentinelEOL")
+	}
+}
+
+func parse(in string, config ...configFunc) (*Document, error) {
 	r := strings.NewReader(in)
 	l := NewLexer(r)
 	p := NewParser()
+	for _, fn := range config {
+		fn(l, p)
+	}
 	if err := p.Parse(l); err != nil {
 		return nil, err
 	}
 	return p.Document(), nil
 }
 
-func mustParse(t *testing.T, in string) *Document {
-	doc, err := parse(in)
+func mustParse(t *testing.T, in string, config ...configFunc) *Document {
+	doc, err := parse(in, config...)
 	if err != nil {
 		t.Fatalf("Parse(..) error = %v; want nil", err)
 	}
@@ -26,13 +38,13 @@ func mustParse(t *testing.T, in string) *Document {
 	return doc
 }
 
-func mustParseNamed(t *testing.T, name string, in string) *Document {
+func mustParseNamed(t *testing.T, name string, in string, config ...configFunc) *Document {
 	doc := mustParse(t, in)
 	doc.Name = name
 	return doc
 }
 
-func mustNotParse(t *testing.T, in string) *Document {
+func mustNotParse(t *testing.T, in string, config ...configFunc) *Document {
 	doc, err := parse(in)
 	if err == nil {
 		t.Fatalf("Parse(..) error = %v; want error", err)
@@ -43,10 +55,11 @@ func mustNotParse(t *testing.T, in string) *Document {
 
 // parseTestCase is used to describe and run a parser test, optionally as a subtest.
 type parseTestCase struct {
-	Name string
-	Src  string
-	Doc  *Document
-	Fun  func(*testing.T, string) *Document
+	Name   string
+	Src    string
+	Doc    *Document
+	Fun    func(*testing.T, string, ...configFunc) *Document
+	Config []configFunc
 }
 
 func (p parseTestCase) RunSubtest(t *testing.T) {
@@ -59,7 +72,7 @@ func (p parseTestCase) Run(t *testing.T) {
 	if fn == nil {
 		fn = mustParse
 	}
-	doc := fn(t, p.Src)
+	doc := fn(t, p.Src, p.Config...)
 	objectsEqual(t, "", doc, p.Doc)
 }
 
@@ -187,6 +200,42 @@ func TestParseExample(t *testing.T) {
 
 	parseTestCase{
 		Src: exampleSource,
+		Doc: doc().
+			section("server", "go.spiff.io").
+			/* server */ statement("listen", "0.0.0.0:80").
+			/* server */ statement("control", "unix:///var/run/httpd.sock").
+			/* server */ section("proxy", "unix:///var/run/go-redirect.sock").
+			/* server */ /* proxy */ statement("strip-x-headers", true).
+			/* server */ /* proxy */ statement("log-access", false).
+			/* server */ up().
+			/* server */ section("cache", "memory", "64mb").
+			/* server */ /* cache */ statement("expire", time.Minute*10, 404).
+			/* server */ /* cache */ statement("expire", time.Hour, 301, 302).
+			/* server */ /* cache */ statement("expire", time.Minute*5, 200).
+			Doc(),
+	}.Run(t)
+}
+
+func TestParseExampleSentinelEOL(t *testing.T) {
+	const exampleSource = `server go.spiff.io {
+    // Retain some semicolons to see they're still the same
+    listen 0.0.0.0:80;
+    control unix:///var/run/httpd.sock
+    proxy unix:///var/run/go-redirect.sock {
+        strip-x-headers yes
+        log-access no;
+    }
+    // keep caches in 64mb of memory
+    cache memory 64mb {
+         expire 10m 404
+         expire 1h  301 302;
+         expire 5m  200
+    }
+}`
+
+	parseTestCase{
+		Src:    exampleSource,
+		Config: []configFunc{parserSetSentinelEOL},
 		Doc: doc().
 			section("server", "go.spiff.io").
 			/* server */ statement("listen", "0.0.0.0:80").
