@@ -111,7 +111,7 @@ func walkInContext(context, parent ParentNode, walker Walker) (err error) {
 			err = walkInContext(context, child, walker)
 
 		default:
-			err = fmt.Errorf("unrecognized node type %T", child)
+			err = xerrors.Errorf("unrecognized node type during walk: %T", child)
 		}
 
 		if err != nil {

@@ -7,12 +7,14 @@ import (
 	"regexp"
 	"testing"
 	"time"
+
+	"golang.org/x/xerrors"
 )
 
 func mkdec(str string) *Literal {
 	f, ok := new(big.Float).SetPrec(DefaultPrecision).SetString(str)
 	if !ok {
-		panic(fmt.Errorf("error parsing float string: %q", str))
+		panic(xerrors.Errorf("error parsing float string: %q", str))
 	}
 	return &Literal{
 		Tok: Token{
@@ -61,7 +63,7 @@ func mkexpr(arg interface{}) ExprNode {
 	case []interface{}:
 		return &Array{Elems: mkexprs(arg...)}
 	}
-	panic(fmt.Errorf("unsupported type %T", arg))
+	panic(xerrors.Errorf("unsupported type %T", arg))
 }
 
 func mkstr(s string) *Literal {
