@@ -560,7 +560,7 @@ func (l *Lexer) lexCommentStart(next consumerFunc) consumerFunc {
 	return func(r rune) (Token, consumerFunc, error) {
 		if r != rComment {
 			l.unread()
-			return l.lexBecomeWord(rComment)
+			return l.lexBecomeWord(-1)
 		}
 		return noToken, l.lexComment(next), nil
 	}
