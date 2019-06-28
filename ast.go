@@ -16,6 +16,16 @@ type Node interface {
 	format(prefix string) string
 }
 
+// Start returns the starting location of a node's primary token.
+func Start(n Node) Location {
+	return n.Token().Start
+}
+
+// End returns the ending location of a node's primary token.
+func End(n Node) Location {
+	return n.Token().End
+}
+
 // ParentNode is a node that has sub-nodes.
 type ParentNode interface {
 	Node
