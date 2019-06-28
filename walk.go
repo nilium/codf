@@ -1,6 +1,10 @@
 package codf
 
-import "fmt"
+import (
+	"fmt"
+
+	"golang.org/x/xerrors"
+)
 
 // Walker is used by Walk to consume statements and sections, recursively, in ParentNodes (sections
 // and documents).
