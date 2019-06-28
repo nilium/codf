@@ -29,6 +29,20 @@ type ParamNode interface {
 	Parameters() []ExprNode
 }
 
+// Name returns the name of a node if it has one.
+// This is the first word of a section or statement.
+func Name(node Node) (name string, ok bool) {
+	type nameNode interface {
+		Name() string
+		Node
+	}
+	nm, ok := node.(nameNode)
+	if !ok {
+		return "", false
+	}
+	return nm.Name(), true
+}
+
 // segmentNode is any section- or statement-like parseNode that accepts parameters (values). This
 // includes maps and arrays, as well, which also function as parser contexts.
 type segmentNode interface {
