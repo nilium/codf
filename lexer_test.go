@@ -106,6 +106,16 @@ func wordCase(word string) tokenCase {
 	}
 }
 
+func commentCase(text string) tokenCase {
+	return tokenCase{
+		Token: Token{
+			Kind:  TComment,
+			Raw:   []byte("//" + text),
+			Value: text,
+		},
+	}
+}
+
 func quoteCase(str string) tokenCase {
 	return tokenCase{
 		Token: Token{
@@ -724,7 +734,8 @@ func TestStatement(t *testing.T) {
 		_ws, wordCase("a"), _semicolon,
 		_ws, wordCase("b{}"),
 		_ws, wordCase("c//foo"),
-		_ws, _comment,
+		_ws, commentCase("foo"),
+		_ws, commentCase(" foo bar baz"),
 		_ws, wordCase("#[foo]"),
 		_ws, wordCase("$[foo]"),
 		_ws, wordCase("${foo}"),
@@ -743,6 +754,7 @@ func TestStatement(t *testing.T) {
 		a;
 		b{}
 		c//foo //foo
+		// foo bar baz
 		#[foo] $[foo] ${foo} ${{foo}} ${[foo}] ${foo}} ${foo]]
 		;;
 		`)
