@@ -172,13 +172,6 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		}
 		expected = "string"
 
-	case *Word:
-		if s, ok := codf.Word(arg); ok {
-			*v = Word(s)
-			return nil
-		}
-		expected = "quoted string"
-
 	case *url.URL:
 		if s, ok := codf.String(arg); ok {
 			u, err := url.Parse(s)
