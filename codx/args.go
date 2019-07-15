@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"sort"
+	"strconv"
 	"time"
 
 	"go.spiff.io/codf"
@@ -61,11 +62,11 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 	var expected string
 
 	switch v := dest.(type) {
-	case Keyword:
-		if w, ok := codf.Word(arg); ok && w == string(v) {
-			return nil
-		}
-		expected = "keyword " + string(v)
+	case ExprValue:
+		return v.Set(arg)
+
+	case Value:
+		return v.Set(arg)
 
 	case **big.Int:
 		if bi := codf.BigInt(arg); bi != nil {
@@ -171,21 +172,6 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		}
 		expected = "string"
 
-	case *Quote:
-		if s, ok := codf.Quote(arg); ok {
-			*v = Quote(s)
-			return nil
-		}
-		expected = "quoted string"
-
-	case *OnOff:
-		switch s, _ := codf.Word(arg); s {
-		case "on", "off":
-			*v = s == "on"
-			return nil
-		}
-		expected = "`on` or `off`"
-
 	case *Word:
 		if s, ok := codf.Word(arg); ok {
 			*v = Word(s)
@@ -200,6 +186,7 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 				return err
 			}
 			*v = *u
+			return nil
 		}
 		expected = "URL"
 
@@ -221,6 +208,9 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		} else if d, ok := codf.Int64(arg); ok && d == 0 {
 			*v = 0
 			return nil
+		} else if d, ok := codf.Float64(arg); ok && !(math.IsInf(d, 0) || math.IsNaN(d)) {
+			*v = time.Duration(float64(time.Second) * d)
+			return nil
 		}
 		expected = "duration"
 
@@ -241,8 +231,11 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 	}
 
 cannotParse:
-	return xerrors.Errorf("expected %s; got %s",
-		expected, arg.Token().Kind)
+	return expectedErr(arg, expected)
+}
+
+func expectedErr(node codf.Node, kind string) error {
+	return xerrors.Errorf("expected %s; got %s", kind, node.Token().Kind)
 }
 
 // Auxiliary types for performing more specific matches
@@ -251,23 +244,76 @@ cannotParse:
 // a specific value).
 type Keyword string
 
+// Set implements ExprValue.
+func (k Keyword) Set(v codf.ExprNode) error {
+	s, _ := codf.Word(v)
+	if s != string(k) {
+		return expectedErr(v, "keyword "+strconv.Quote(string(k)))
+	}
+	return nil
+}
+
 // Word is an argument type used when the argument must be a word.
 type Word string
 
+// AsWord returns a string pointer as a Word pointer.
 func AsWord(dest *string) *Word {
 	return (*Word)(dest)
+}
+
+// Set implements ExprValue.
+func (w *Word) Set(v codf.ExprNode) error {
+	s, ok := codf.Word(v)
+	if !ok {
+		return expectedErr(v, "word")
+	}
+	*w = Word(s)
+	return nil
 }
 
 // Quote is an argument type used when the argument must be a quoted string.
 type Quote string
 
+// AsQuote returns a string pointer as a Quote pointer.
 func AsQuote(dest *string) *Quote {
 	return (*Quote)(dest)
+}
+
+// Set implements ExprValue.
+func (q *Quote) Set(v codf.ExprNode) error {
+	s, ok := codf.Quote(v)
+	if !ok {
+		return expectedErr(v, "quoted string")
+	}
+	*q = Quote(s)
+	return nil
 }
 
 // OnOff is an argument type used when the argument must be the word "on" or "off".
 type OnOff bool
 
+// AsOnOff returns a boolean pointer as an OnOff pointer.
 func AsOnOff(dest *bool) *OnOff {
 	return (*OnOff)(dest)
+}
+
+// Set implements ExprValue.
+func (o *OnOff) Set(v codf.ExprNode) error {
+	switch s, _ := codf.Word(v); s {
+	case "on", "off":
+		*o = s == "on"
+		return nil
+	default:
+		return expectedErr(v, "`on` or `off`")
+	}
+}
+
+// Value is any value that can be set by ParseArg.
+type Value interface {
+	Set(codf.Node) error
+}
+
+// ExprValue is any value that can be set by ParseArg, but accepts an ExprNode instead of a Node.
+type ExprValue interface {
+	Set(codf.ExprNode) error
 }
