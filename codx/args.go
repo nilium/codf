@@ -89,6 +89,13 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		}
 		expected = "boolean"
 
+	case **bool:
+		if b, ok := codf.Bool(arg); ok {
+			*v = &b
+			return nil
+		}
+		expected = "boolean"
+
 	case *float64:
 		if f, ok := codf.Float64(arg); ok {
 			*v = f
@@ -96,9 +103,24 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		}
 		expected = "float"
 
+	case **float64:
+		if f, ok := codf.Float64(arg); ok {
+			*v = &f
+			return nil
+		}
+		expected = "float"
+
 	case *float32:
 		if f, ok := codf.Float64(arg); ok {
 			*v = float32(f)
+			return nil
+		}
+		expected = "float"
+
+	case **float32:
+		if f, ok := codf.Float64(arg); ok {
+			q := float32(f)
+			*v = &q
 			return nil
 		}
 		expected = "float"
@@ -114,9 +136,31 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		}
 		expected = "integer"
 
+	case **int:
+		if i, ok := codf.Int64(arg); ok {
+			if maxInt != math.MaxInt64 && i > int64(maxInt) || i < int64(minInt) {
+				return xerrors.Errorf("integer out of range: must be within %d..%d",
+					minInt, maxInt)
+			}
+			q := int(i)
+			*v = &q
+			return nil
+		}
+		expected = "integer"
+
 	case *int64:
 		if i, ok := codf.Int64(arg); ok {
 			*v = i
+			return nil
+		} else if bi := codf.BigInt(arg); bi != nil && !bi.IsInt64() {
+			return xerrors.Errorf("integer out of range: must be within %d..%d",
+				math.MinInt64, math.MaxInt64)
+		}
+		expected = "integer"
+
+	case **int64:
+		if i, ok := codf.Int64(arg); ok {
+			*v = &i
 			return nil
 		} else if bi := codf.BigInt(arg); bi != nil && !bi.IsInt64() {
 			return xerrors.Errorf("integer out of range: must be within %d..%d",
@@ -135,6 +179,18 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 		}
 		expected = "integer"
 
+	case **int32:
+		if i, ok := codf.Int64(arg); ok {
+			if i > math.MaxInt32 || i < math.MinInt32 {
+				return xerrors.Errorf("integer out of range: must be within %d..%d",
+					math.MinInt32, math.MaxInt32)
+			}
+			q := int32(i)
+			*v = &q
+			return nil
+		}
+		expected = "integer"
+
 	case *int16:
 		if i, ok := codf.Int64(arg); ok {
 			if i > math.MaxInt16 || i < math.MinInt16 {
@@ -142,6 +198,18 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 					math.MinInt16, math.MaxInt16)
 			}
 			*v = int16(i)
+			return nil
+		}
+		expected = "integer"
+
+	case **int16:
+		if i, ok := codf.Int64(arg); ok {
+			if i > math.MaxInt16 || i < math.MinInt16 {
+				return xerrors.Errorf("integer out of range: must be within %d..%d",
+					math.MinInt16, math.MaxInt16)
+			}
+			q := int16(i)
+			*v = &q
 			return nil
 		}
 		expected = "integer"
@@ -168,6 +236,13 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 	case *string:
 		if s, ok := codf.String(arg); ok {
 			*v = s
+			return nil
+		}
+		expected = "string"
+
+	case **string:
+		if s, ok := codf.String(arg); ok {
+			*v = &s
 			return nil
 		}
 		expected = "string"
@@ -203,6 +278,20 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 			return nil
 		} else if d, ok := codf.Float64(arg); ok && !(math.IsInf(d, 0) || math.IsNaN(d)) {
 			*v = time.Duration(float64(time.Second) * d)
+			return nil
+		}
+		expected = "duration"
+
+	case **time.Duration:
+		if d, ok := codf.Duration(arg); ok {
+			*v = &d
+			return nil
+		} else if d, ok := codf.Int64(arg); ok && d == 0 {
+			*v = new(time.Duration)
+			return nil
+		} else if d, ok := codf.Float64(arg); ok && !(math.IsInf(d, 0) || math.IsNaN(d)) {
+			q := time.Duration(float64(time.Second) * d)
+			*v = &q
 			return nil
 		}
 		expected = "duration"
