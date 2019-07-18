@@ -411,3 +411,43 @@ type Value interface {
 type ExprValue interface {
 	Set(codf.ExprNode) error
 }
+
+// OneOf attempts to parse an argument as at least one of the items in its slice.
+// If OneOf fails on all elements of its slice, it returns the first error it encountered.
+type OneOf []interface{}
+
+// Set implements ExprValue.
+func (o OneOf) Set(arg codf.ExprNode) (err error) {
+	for _, dest := range o {
+		if perr := ParseArg(arg, dest); perr == nil {
+			return nil
+		} else if err == nil {
+			err = perr
+		}
+	}
+	return err
+}
+
+// AllOf attempts to parse an argument as all of the items in its slice.
+// This can be useful for things like extracting both the token and the value of the token. For
+// example:
+//
+//     var where codf.Location
+//     var duration time.Duration
+//     _ = codx.ParseArgs(stmt.Parameters(), codx.AllOf{&where, &duration})
+//     if duration < 0 {
+//         return fmt.Errorf("%v: invalid duration %v: must be >= 0s", where, duration)
+//     }
+//
+// If any error occurs passing an AllOf's element to ParseArg, it returns that error immediately.
+type AllOf []interface{}
+
+// Set implements ExprValue.
+func (a AllOf) Set(arg codf.ExprNode) error {
+	for _, dest := range a {
+		if err := ParseArg(arg, dest); err != nil {
+			return err
+		}
+	}
+	return nil
+}
