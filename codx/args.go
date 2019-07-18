@@ -70,15 +70,19 @@ func ParseArg(arg codf.ExprNode, dest interface{}) error {
 
 	case *codf.Token:
 		*v = arg.Token()
+		return nil
 
 	case *codf.Location:
 		*v = arg.Token().Start
+		return nil
 
 	case *codf.Node:
 		*v = arg
+		return nil
 
 	case *codf.ExprNode:
 		*v = arg
+		return nil
 
 	case **big.Int:
 		if bi := codf.BigInt(arg); bi != nil {
