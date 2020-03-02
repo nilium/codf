@@ -2,8 +2,6 @@ package codf
 
 import (
 	"fmt"
-
-	"golang.org/x/xerrors"
 )
 
 // Walker is used by Walk to consume statements and sections, recursively, in ParentNodes (sections
@@ -115,7 +113,7 @@ func walkInContext(context, parent ParentNode, walker Walker) (err error) {
 			err = walkInContext(context, child, walker)
 
 		default:
-			err = xerrors.Errorf("unrecognized node type during walk: %T", child)
+			err = fmt.Errorf("unrecognized node type during walk: %T", child)
 		}
 
 		if err != nil {
